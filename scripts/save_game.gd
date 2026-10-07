@@ -1,16 +1,20 @@
 extends RefCounted
-## Floor checkpoints: written when a floor starts, removed on victory or defeat.
-## Version 2 stores attributes, unspent points, equipment and the bag.
+## Checkpoints: written on entering a place, removed on victory or defeat.
+## Version 2 stores attributes, unspent points, equipment and the bag. Version 3
+## adds the world: where the hero is, the run's seed, places visited, the stash
+## and side quests. Version 2 saves still load, on the street of their floor.
 
 const Items = preload("res://scripts/items.gd")
-const VERSION = 2
+const VERSION = 3
+const Zones = preload("res://scripts/zones.gd")
+const AREA_KINDS = ["street", "mall", "park", "warehouse", "subway"]
 const STAT_KEYS = ["hp","level","xp","gold","potions","mana","attributes","points","equipment","bag","class"]
 
-static func write(path: String, player: Dictionary, floor_number: int, kills: int, elapsed: float, seed_value: int) -> void:
+static func write(path: String, player: Dictionary, floor_number: int, kills: int, elapsed: float, seed_value: int, world: Dictionary = {}) -> void:
 	var stats = {}
 	for key in STAT_KEYS: stats[key] = player[key]
 	var file = FileAccess.open(path,FileAccess.WRITE)
-	if file: file.store_string(JSON.stringify({"version":VERSION,"floor":floor_number,"stats":stats,"kills":kills,"time":elapsed,"seed":seed_value}))
+	if file: file.store_string(JSON.stringify({"version":VERSION,"floor":floor_number,"stats":stats,"kills":kills,"time":elapsed,"seed":seed_value,"world":world}))
 
 static func _number(value) -> bool:
 	return value is float or value is int
@@ -35,7 +39,7 @@ static func _valid_item(item) -> bool:
 static func read(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path): return {}
 	var data = JSON.parse_string(FileAccess.get_file_as_string(path))
-	if not data is Dictionary or data.get("version")!=VERSION: return {}
+	if not data is Dictionary or not (data.get("version") in [2.0,3.0]): return {}
 	if not data.get("stats") is Dictionary or int(data.get("floor",0)) not in [1,2,3]: return {}
 	var s = data.stats
 	for k in ["hp","level","xp","gold","potions","mana","points"]:
@@ -51,6 +55,19 @@ static func read(path: String) -> Dictionary:
 	if s.bag.size()>Items.BAG_SIZE: return {}
 	for item in s.bag:
 		if not _valid_item(item): return {}
+	var world = data.get("world",{})
+	if not world is Dictionary: return {}
+	if not world.is_empty():
+		var area = world.get("area")
+		if not area is Dictionary or not (area.get("kind") in AREA_KINDS) or not _number(area.get("level")): return {}
+		if int(area.level)<1 or int(area.level)>Zones.STREETS: return {}
+		if area.has("arrive") and not area.arrive is String: return {}
+		if not _number(world.get("run_seed")) or not world.get("visited") is Array or not world.get("quests") is Dictionary: return {}
+		if not world.get("stash") is Array or world.stash.size()>Zones.STASH_SIZE: return {}
+		for item in world.stash:
+			if not _valid_item(item): return {}
+		world.run_seed = int(world.run_seed)
+		area.level = int(area.level)
 	# JSON stores every number as a float; counters go back to whole numbers.
 	for k in ["level","xp","gold","potions","points"]: s[k] = int(s[k])
 	for k in Items.ATTRIBUTES: s.attributes[k] = int(s.attributes[k])

@@ -12,6 +12,7 @@ const Classes = preload("res://scripts/classes.gd")
 const Elites = preload("res://scripts/elites.gd")
 const Data = preload("res://scripts/data.gd")
 const GearModels = preload("res://scripts/gear_models.gd")
+const Zones = preload("res://scripts/zones.gd")
 
 static func run(g) -> void:
 	var failures: Array[String] = []
@@ -27,6 +28,7 @@ static func run(g) -> void:
 	_classes(g,check)
 	_click_to_move(g,check)
 	_elites(g,check)
+	_zones(g,check)
 	g._begin()
 	_items(g,check)
 	var finished: Array = []
@@ -47,6 +49,160 @@ static func run(g) -> void:
 		print("PASS: 60 connected city floors with wide streets, an open subway entrance, a quiet start and props that never wall anything off; equal eight-way speed; 15/30/60/144 FPS motion; braking/reversal; swept collision and sliding; visible-body aim; timed damage; buffered combo/finisher; no double hits; dodge cancellation; enemy line of sight, pathfinding, wind-ups and spacing; walled nova and mana; three classes, their skills and unlock levels; click-to-move and chase; leveling pace; progression; stat points; item generation; 50 armor bases with favored classes, built-in stats, 3D looks and old saves; equip, swap, sockets, salvage, sort; elemental effects; loot pickup; saves; menus; audio and looping music.")
 	else: print("FAIL: ",failures)
 	g.get_tree().quit(0 if failures.is_empty() else 1)
+
+## Open ground reachable from a point without walking through props.
+static func _reach(g, from: Vector2) -> Dictionary:
+	var start = Vector2i(floori(from.x),floori(from.y))
+	var seen = {start:true}
+	var queue = [start]
+	var cursor = 0
+	while cursor<queue.size():
+		var cell = queue[cursor]
+		cursor += 1
+		for dir in [Vector2i.LEFT,Vector2i.RIGHT,Vector2i.UP,Vector2i.DOWN]:
+			var next = cell+dir
+			if g.cells.has(next) and not g.blocked.has(next) and not seen.has(next):
+				seen[next] = true
+				queue.append(next)
+	return seen
+
+## Side areas, doorways, the subway between streets, the food court hub, travel
+## back to places already visited, side quests and the stash.
+static func _zones(g, check: Callable) -> void:
+	g._begin()
+	var places = [["mall",1],["park",1],["warehouse",2],["subway",1],["subway",2]]
+	for sample in 6:
+		g.run_seed = 900+sample*17
+		for place in places:
+			g._travel(place[0],place[1],"door" if place[0]!="subway" else "west")
+			var name = "%s %d/%d" % [place[0],place[1],sample]
+			var reach = _reach(g,g.player.pos)
+			var open = 0
+			for c in g.cells:
+				if not g.blocked.has(c): open += 1
+			check.call(reach.size()==open,"Every open cell of %s can be reached" % name)
+			check.call(g._free(g.player.pos,0.22),"The hero arrives on open ground in %s" % name)
+			for exit in g.exits:
+				var near = false
+				for c in DungeonGenerator._cells_around(Vector2i(exit.pos),1):
+					if reach.has(c): near = true
+				check.call(near,"Every way out of %s can be reached" % name)
+			for e in g.enemies: check.call(g._walkable(e.pos),"Enemies stand on open ground in %s" % name)
+			check.call(g.enemies.size()>=8,"%s has enemies to fight" % name)
+			check.call(g.rooms.size()>=4,"%s has several rooms" % name)
+			if Zones.QUESTS.has(place[0]):
+				check.call(g.enemies.any(func(e): return e.get("quest","")==place[0]),"%s has its quest boss" % name)
+			if place[0]=="mall":
+				check.call(g.safe_rect.size!=Vector2.ZERO and not g.enemies.any(func(e): return g.safe_rect.grow(3).has_point(e.pos)),"No enemies in the food court")
+				for kind in ["vendor","stash","transit"]:
+					var found = g.props.filter(func(p): return p.kind==kind)
+					check.call(not found.is_empty() and found.all(func(p): return reach.has(Vector2i(p.pos)+Vector2i(0,1)) or reach.has(Vector2i(p.pos)+Vector2i(1,1))),"The food court has a reachable %s" % kind)
+	# Streets: doorways into their side areas, reachable from the start.
+	for sample in 12:
+		var level = sample%3+1
+		g.run_seed = 300+sample
+		g._travel("street",level,"start")
+		var reach = _reach(g,g.player.pos)
+		var doors = g.exits.filter(func(e): return e.kind=="door")
+		check.call(doors.size()==Zones.DOORS[level].size(),"Street %d has a doorway for each side area" % level)
+		for d in doors: check.call(reach.has(Vector2i(d.pos)) and not g.cells.has(Vector2i(d.wall)),"Doorways stand on the sidewalk in a building front")
+		check.call(g.exits.any(func(e): return e.kind=="subway" and e.to[2]=="west")==(level<3),"Streets before the last have a subway entrance")
+		check.call(g.exits.any(func(e): return e.kind=="subway" and e.to[2]=="east")==(level>1),"Later streets have stairs back down to the last station")
+		for e in g.enemies:
+			if e.kind!="boss": check.call(e.pos.distance_to(g.player.pos)>=9,"No enemies spawn at the start of street %d" % level)
+	# Going in and out: the same place every visit, arriving at its doorway.
+	g.run_seed = 4321
+	g._travel("street",1,"start")
+	var door = g.exits.filter(func(e): return e.to[0]=="mall")[0]
+	var street_cells = g.cells.size()
+	g.player.pos = door.pos
+	g._interact()
+	check.call(g.area.kind=="mall" and g.visited.has("foodcourt") and g.visited.has("mall:1"),"A doorway leads into the mall")
+	var mall_cells = g.cells.size()
+	var mall_props = g.props.size()
+	g.player.pos = g.exits[0].pos
+	g._interact()
+	check.call(g.area.kind=="street" and g.cells.size()==street_cells and g.player.pos.distance_to(door.pos)<1.0,"Leaving the mall puts you back outside its doorway")
+	g.player.pos = door.pos
+	g._interact()
+	check.call(g.cells.size()==mall_cells and g.props.size()==mall_props,"The mall is the same place on every visit")
+	# The food court: no fighting, enemies keep out, vendors, stash and transit.
+	g.player.pos = g.arrivals.foodcourt
+	check.call(g._safe(),"The food court is a safe zone")
+	var hp = g.player.hp
+	g._hurt(30)
+	check.call(g.player.hp==hp,"Nothing hurts you in the food court")
+	g.player.attack = 0
+	g._request_attack()
+	check.call(g.swing.is_empty(),"No attacking in the food court")
+	var lurker = g._spawn_enemy("imp",g.player.pos+Vector2(0,6))
+	lurker.alert = true
+	for k in 30: EnemyAI.update_all(g,1.0/30)
+	check.call(not g.safe_rect.grow(0.8).has_point(lurker.pos),"Enemies stay out of the food court")
+	g.enemies.erase(lurker)
+	var pawn = g.props.filter(func(p): return p.get("vendor","")=="pawn")[0]
+	g.player.pos = pawn.pos+Vector2(0,1.5)
+	g._interact()
+	check.call(g.shop=="pawn" and g.state=="inventory" and g.stock.size()==Zones.STOCK_SIZE,"Ray's Pawn opens with stock")
+	g.player.gold = 100000
+	g.player.bag = Items.empty_bag()
+	var item = g.stock[0]
+	g._activate("stock:0")
+	check.call(g.player.bag[0]!=null and g.player.bag[0].name==item.name and g.stock[0]==null and g.player.gold==100000-Inventory.price(item),"Buying from the Pawn Shop")
+	var value = int(g.player.bag[0].value)
+	g._activate("bag:0",true)
+	check.call(g.player.bag[0]==null and g.player.gold==100000-Inventory.price(item)+value,"Selling to the Pawn Shop")
+	g._close_panels()
+	var juice = g.props.filter(func(p): return p.get("vendor","")=="juice")[0]
+	g.player.pos = juice.pos+Vector2(0,1.5)
+	g._interact()
+	var potions = g.player.potions
+	g._activate("buy_potion")
+	check.call(g.shop=="juice" and g.player.potions==potions+1,"The Juice Bar sells potions")
+	g._close_panels()
+	var locker = g.props.filter(func(p): return p.kind=="stash")[0]
+	g.player.pos = locker.pos+Vector2(0,1.5)
+	g._interact()
+	g.player.bag[5] = Items.generate(g,3,2,"ring")
+	var stashed = g.player.bag[5].name
+	g._activate("bag:5",true)
+	check.call(g.shop=="stash" and g.player.bag[5]==null and g.stash.any(func(i): return i!=null and i.name==stashed),"Right-click puts an item in the stash")
+	g._close_panels()
+	check.call(g.state=="play" and g.shop=="","Closing the stash")
+	# Fast travel: only to places already visited.
+	var kiosk = g.props.filter(func(p): return p.kind=="transit")[0]
+	g.player.pos = kiosk.pos+Vector2(0,1.5)
+	g._interact()
+	check.call(g.shop=="travel","The transit map opens")
+	var places_list = Zones.destinations()
+	var park_index = places_list.find(places_list.filter(func(p): return p.key=="park:1")[0])
+	g.visited.erase("park:1")
+	g._activate("travel:%d" % park_index)
+	check.call(g.area.kind=="mall","The transit map only goes where you have been")
+	var street_index = places_list.find(places_list.filter(func(p): return p.key=="street:1")[0])
+	g._activate("travel:%d" % street_index)
+	check.call(g.area.kind=="street" and g.floor_number==1 and g.state=="play","The transit map takes you back to a street")
+	# Side quests: taken on entering, done when the boss falls, saved.
+	g._travel("park",1,"door")
+	check.call(g.player.quests.get("park","")=="active","Entering the park starts its quest")
+	var sally = g.enemies.filter(func(e): return e.get("quest","")=="park")[0]
+	g._damage_enemy(sally,int(sally.hp)+10)
+	check.call(g.player.quests.park=="done" and g.drops.any(func(d): return d.kind=="item" and int(d.item.rarity)>=3),"Beating Static Sally finishes the quest with a reward")
+	var saved = g._load_save()
+	check.call(not saved.is_empty() and saved.world.area.kind=="park" and saved.world.quests.park=="done" and saved.world.stash.any(func(i): return i!=null and i.name==stashed),"The checkpoint keeps the place, quests and stash")
+	g._travel("park",1,"door")
+	check.call(not g.enemies.any(func(e): return e.has("quest")),"A finished quest's boss stays gone")
+	g._begin(true)
+	check.call(g.area.kind=="park" and g.player.quests.park=="done" and g.stash.any(func(i): return i!=null and i.name==stashed) and g.visited.has("foodcourt"),"Continue returns to the park with quests, stash and places")
+	# An old version 2 checkpoint still loads on its floor's street.
+	var old = SaveGame.read(g.save_file)
+	old.version = 2
+	old.erase("world")
+	var file = FileAccess.open(g.save_file,FileAccess.WRITE)
+	file.store_string(JSON.stringify(old))
+	file = null
+	g._begin(true)
+	check.call(g.area.kind=="street" and g.floor_number==int(old.floor),"Older checkpoints load on their street")
 
 ## Removes randomness from combat: no crits or evades, and a fixed-damage blade.
 static func _steady(g) -> void:
@@ -471,7 +627,12 @@ static func _progression(g, check: Callable) -> void:
 	g.player.bag[3] = Items.make_gem("ruby",1)
 	g._recalc()
 	g._interact()
-	check.call(g.floor_number==2 and g.player.potions==3 and g.player.gold==5,"Stairs progression and restock")
+	check.call(g.area.kind=="subway" and g.floor_number==1 and g.player.potions==3 and g.player.gold==5,"The subway entrance leads down to the station, with a restock")
+	var up = g.exits.filter(func(e): return e.to[0]=="street" and e.to[1]==2)
+	check.call(up.size()==1,"The station has stairs up to the next street")
+	g.player.pos = up[0].pos
+	g._interact()
+	check.call(g.area.kind=="street" and g.floor_number==2,"Stairs progression")
 	var saved = g._load_save()
 	check.call(not saved.is_empty() and int(saved.floor)==2,"Checkpoint serialization")
 	var saved_hp = g.player.hp

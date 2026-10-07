@@ -108,3 +108,20 @@ const FLOOR_THEMES = [
 		"signs":["SUNSET MALL","FOOD COURT","CINEMA","ARCADE","SYNTHWAVE","VHS","PLAZA","NEON","DREAMS","SURF SHOP","MALL","STARLIGHT"],
 		"weather":"glitter","mote":Color(1.0,0.6,0.95)},
 ]
+
+## Side areas: changes to their street's theme. indoor areas get plain walls
+## (wall, wall_top, band) instead of building fronts, and a ceiling-dark sky.
+const ZONE_THEMES = {
+	"mall": {"indoor":true, "wall":Color("d9cbe0"), "wall_top":Color("2a2238"), "band":Color("ff4fd8"), "light":Color("ffd9f0"),
+		"glow":Color("ff4fd8"), "lot":Color("8a7a9a"), "pavers":Color("b8aac8"), "weather":"none", "mote":Color(1.0,0.8,0.95),
+		"floor":{"mall":[Color("cfc2d8"),Color("bfb0cc")], "court":[Color("d8b8d8"),Color("7a5c94")]}, "ambient":0.5,
+		"signs":["ARCADE","TAPES","SALE","SHOES","CINEMA","PRETZELS","RECORDS","GAMES","CANDY","JEANS","PERFUME","PIZZA"]},
+	"warehouse": {"indoor":true, "wall":Color("5a5650"), "wall_top":Color("1c1a18"), "band":Color("d8a020"), "light":Color("ffc070"),
+		"glow":Color("ff9a3c"), "weather":"dust", "mote":Color(1.0,0.85,0.6), "ambient":0.22,
+		"floor":{"concrete":[Color("4e4c48"),Color("4a4844")]}},
+	"subway": {"indoor":true, "wall":Color("d8d8cc"), "wall_top":Color("16181c"), "band":Color("2a8a5a"), "light":Color("c8ffe8"),
+		"glow":Color("3ff0ff"), "weather":"dust", "mote":Color(0.75,1.0,0.9), "ambient":0.3,
+		"floor":{"platform":[Color("6a6a70"),Color("646469")], "rail":[Color("2a2420"),Color("2e2824")], "edge":[Color("e0c030"),Color("d8b828")]}},
+	"park": {"grass":Color("2c5034"), "dirt":Color("4f4234"), "pavers":Color("55525e"), "glow":Color("5dff8f"), "weather":"leaves",
+		"mote":Color(0.6,1.0,0.6), "water":Color("1a3a4a")},
+}

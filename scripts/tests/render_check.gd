@@ -15,6 +15,62 @@ static func _capture(g, filename: String) -> void:
 	var error = g.get_viewport().get_texture().get_image().save_png("res://previews/"+filename)
 	if error!=OK: push_error("Preview capture failed: "+filename)
 
+## Stands the hero at a point, lights the area around it and takes a picture.
+static func _shot(g, at: Vector2, filename: String, enemies: bool = true) -> void:
+	g.player.pos = at
+	g.player.inv = 99
+	if not enemies: g.enemies = g.enemies.filter(func(e): return e.pos.distance_to(at)>9)
+	for k in 3: g._reveal()
+	g.camera = g._iso(g.player.pos)
+	if g.view3d: g.view3d.place_camera(g.player.pos)
+	for frame in 4: await g.get_tree().process_frame
+	await _capture(g,filename)
+
+## The side areas, the food court and its panels, and a doorway on the street.
+static func _zones(g) -> void:
+	g.state = "play"
+	g.run_seed = 777
+	g.player.level = 4
+	g._recalc()
+	g._travel("street",1,"start")
+	g.enemies.clear()
+	var door = g.exits.filter(func(e): return e.to[0]=="mall")[0]
+	await _shot(g,door.pos+door.face*2.4,"zone-street-mall-door.png")
+	var gate = g.exits.filter(func(e): return e.to[0]=="park")[0]
+	await _shot(g,gate.pos+gate.face*2.4,"zone-street-park-gate.png")
+	g._travel("mall",1,"door")
+	await _shot(g,g.arrivals.door+Vector2(6,0),"zone-mall.png")
+	await _shot(g,Vector2(31.5,24.0),"zone-mall-cross.png")
+	await _shot(g,g.arrivals.foodcourt,"zone-foodcourt.png")
+	var pawn = g.props.filter(func(p): return p.get("vendor","")=="pawn")[0]
+	g.player.pos = pawn.pos+Vector2(0,1.5)
+	g.player.gold = 640
+	g._interact()
+	g.pointer = Vector2(-100,-100)
+	await _capture(g,"zone-pawn.png")
+	g._close_panels()
+	var locker = g.props.filter(func(p): return p.kind=="stash")[0]
+	g.player.pos = locker.pos+Vector2(0,1.5)
+	g._interact()
+	for i in 9: g.stash[i*3] = Items.generate(g,3+i%4,i%5)
+	await _capture(g,"zone-stash.png")
+	g._close_panels()
+	var kiosk = g.props.filter(func(p): return p.kind=="transit")[0]
+	g.player.pos = kiosk.pos+Vector2(0,1.5)
+	g.visited["park:1"] = true
+	g._interact()
+	await _capture(g,"zone-transit.png")
+	g._close_panels()
+	g._travel("park",1,"door")
+	await _shot(g,Vector2(32.5,36.0),"zone-park.png")
+	await _shot(g,Vector2(44.0,22.5),"zone-park-bandshell.png")
+	g._travel("warehouse",2,"door")
+	await _shot(g,g.rooms[2].pos,"zone-warehouse.png")
+	await _shot(g,g.arrivals.door,"zone-warehouse-entry.png")
+	g._travel("subway",1,"west")
+	await _shot(g,Vector2(22.0,25.0),"zone-subway.png")
+	await _shot(g,g.arrivals.west,"zone-subway-stairs.png")
+
 ## Loot of every tier on the floor, a hovered loot plate, then both pages open with a tooltip.
 static func _loot_and_pages(g) -> void:
 	g.enemies.clear()
@@ -250,6 +306,7 @@ static func run(g) -> void:
 		await _capture(g,"district%d.png" % n)
 		g.state = "play"
 		g.zoom = g.WORLD_ZOOM
+	await _zones(g)
 	if FileAccess.file_exists(g.save_file): DirAccess.remove_absolute(g.save_file)
-	print("PASS: %s renderer; " % ("3D" if g.view3d else "2D")+"menus, gameplay, combat, health, wind-up, gait and sword-swing previews saved.")
+	print("PASS: %s renderer; " % ("3D" if g.view3d else "2D")+"menus, gameplay, combat, health, wind-up, gait, sword-swing and zone previews saved.")
 	g.get_tree().quit()

@@ -11,7 +11,12 @@ static func update_all(g, dt: float) -> void:
 	for e in g.enemies:
 		if e.hp<=0: continue
 		var before = e.pos
+		# Nobody fights in the food court: enemies lose interest and keep out.
+		if g._safe():
+			e.alert = false
+			e.windup = 0
 		_update_enemy(g,e,dt)
+		if g.safe_rect.size!=Vector2.ZERO and g.safe_rect.grow(0.8).has_point(e.pos): e.pos = before
 		# Walk-cycle bookkeeping for the character art.
 		var moved = e.pos.distance_to(before)
 		e.step += moved*3.2

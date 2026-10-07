@@ -28,6 +28,8 @@ const DungeonGenerator = preload("res://scripts/dungeon_generator.gd")
 const EnemyAI = preload("res://scripts/enemy_ai.gd")
 const SaveGame = preload("res://scripts/save_game.gd")
 const Synth = preload("res://scripts/synth.gd")
+const Zones = preload("res://scripts/zones.gd")
+const ZoneGenerator = preload("res://scripts/zone_generator.gd")
 const Painter = preload("res://scripts/painter.gd")
 const WorldView = preload("res://scripts/world_view.gd")
 const HudView = preload("res://scripts/hud_view.gd")
@@ -68,6 +70,23 @@ var next_uid = 1
 var state = "title"
 var seed_value = 71283
 var floor_number = 1
+## Where the hero is: {"kind": street, mall, park, warehouse or subway, "level"}.
+## floor_number is the level, which sets how tough everything is. See zones.gd.
+var area = {"kind":"street", "level":1}
+## Ways out of this area ({kind, pos, to: [kind, level, arrival], label}) and
+## where the hero appears for each arrival point.
+var exits: Array = []
+var arrivals = {}
+## The food court: no enemies come in and nobody fights there.
+var safe_rect = Rect2()
+## The run's seed builds each place the same way on every visit.
+var run_seed = 1
+var visited = {}
+var stash: Array = []
+## Open vendor or kiosk panel: "", "pawn", "juice", "stash" or "travel".
+var shop = ""
+var stock: Array = []
+var theme_cache = {}
 var cells = {}
 var seen = {}
 var rooms: Array = []
@@ -235,15 +254,25 @@ func _spawn_enemy(kind: String,pos: Vector2) -> Dictionary:
 func _carve(x: int,y: int,w: int,h: int) -> void:
 	DungeonGenerator.carve(self,x,y,w,h)
 
-func _generate(number: int) -> void:
+## The look of this place: its street's theme with the area's overrides.
+func theme() -> Dictionary:
+	if theme_cache.is_empty():
+		theme_cache = Data.FLOOR_THEMES[clampi(floor_number-1,0,Data.FLOOR_THEMES.size()-1)].duplicate()
+		theme_cache.merge(Data.ZONE_THEMES.get(area.kind,{}),true)
+	return theme_cache
+
+func _generate(number: int, kind: String = "street", arrive: String = "start") -> void:
 	floor_number = number
-	synth.set_track("boss" if number==3 else "street")
+	area = {"kind":kind, "level":number, "arrive":arrive}
+	theme_cache = {}
+	synth.set_track("boss" if number==3 and kind=="street" else "street")
 	cells.clear(); seen.clear(); rooms.clear(); enemies.clear(); props.clear()
 	drops.clear(); particles.clear(); texts.clear(); waves.clear()
 	fx.clear(); decals.clear(); blocked.clear(); hurt_flash = 0
 	cell_style.clear(); signs.clear(); wall_cache.clear()
 	walk_target = null
 	hazards.clear(); player.burn = 0.0
+	exits.clear(); arrivals.clear(); safe_rect = Rect2()
 	shots.clear(); zones.clear(); chase = {}; move_path = PackedVector2Array(); move_held = false
 	player.channel = {}; player.ranged_attack = {}; combat_target = {}; hitstop = 0
 	victory_timer = -1
@@ -255,7 +284,9 @@ func _generate(number: int) -> void:
 	player.pos = Vector2(7.5,7.5)
 	player.inv = 1.0
 	for key in ["attack","nova","dodge","roll"]: player[key] = 0.0
-	DungeonGenerator.generate(self,number)
+	if kind=="street": DungeonGenerator.generate(self,number)
+	else: ZoneGenerator.generate(self,kind,number)
+	if not arrivals.is_empty(): player.pos = arrivals.get(arrive,arrivals.get("start",arrivals.values()[0]))
 	world_view.redraw_all()
 	if view3d: view3d.build()
 	camera = _iso(player.pos)
@@ -263,13 +294,47 @@ func _generate(number: int) -> void:
 	if state=="play": _save()
 
 func _save() -> void:
-	SaveGame.write(save_file,player,floor_number,kills,elapsed,seed_value)
+	SaveGame.write(save_file,player,floor_number,kills,elapsed,seed_value,
+		{"area":area,"run_seed":run_seed,"visited":visited.keys(),"stash":stash,"quests":player.get("quests",{})})
+
+## Goes to a place (see zones.gd for arrival points). Each place is built from
+## the run's seed, so it is the same place every visit.
+func _travel(kind: String, level: int, arrive: String) -> void:
+	visited[Zones.key(kind,level)] = true
+	if kind=="mall" and arrive=="foodcourt": visited["foodcourt"] = true
+	if kind=="mall": stock.clear()
+	var quests: Dictionary = player.get("quests",{})
+	player.quests = quests
+	var fresh = Zones.QUESTS.has(kind) and not quests.has(kind)
+	if fresh: quests[kind] = "active"
+	seed_value = Zones.seed_for(run_seed,kind,level)
+	_generate(level,kind,arrive)
+	seed_value = (run_seed*1103515245+int(elapsed*1000)+next_uid*7919)&0xffffffff
+	if kind=="mall": visited["foodcourt"] = true
+	if fresh:
+		_notice(Zones.QUESTS[kind].intro)
+		_feed("New quest: %s" % Zones.QUESTS[kind].title,Data.SUN_YELLOW)
+	else: _notice("%s · Progress saved" % Zones.name(kind,level))
+	_save()
+
+## Is the hero in the food court, where nobody fights?
+func _safe(point: Vector2 = Vector2.INF) -> bool:
+	if point==Vector2.INF: point = player.pos
+	return safe_rect.size!=Vector2.ZERO and safe_rect.has_point(point)
+
+func _no_fighting() -> bool:
+	if not _safe(): return false
+	if notice_time<=0: _notice("No fighting in the food court.")
+	return true
 
 func _load_save() -> Dictionary:
 	return SaveGame.read(save_file)
 
 func _begin(continue_game: bool = false, class_id: String = "") -> void:
 	var saved = _load_save() if continue_game else {}
+	shop = ""; stock.clear(); visited.clear()
+	stash = []
+	stash.resize(Zones.STASH_SIZE)
 	if class_id=="": class_id = chosen_class
 	if not saved.is_empty(): class_id = saved.stats.get("class","samurai")
 	if not Classes.CLASSES.has(class_id): class_id = "samurai"
@@ -278,6 +343,8 @@ func _begin(continue_game: bool = false, class_id: String = "") -> void:
 	kills = 0; elapsed = 0
 	seed_value = int(Time.get_unix_time_from_system()*1000)&0xffffffff
 	var number = 1
+	run_seed = seed_value
+	var place = {"kind":"street","level":1,"arrive":"start"}
 	if not saved.is_empty():
 		for key in saved.stats: player[key] = saved.stats[key]
 		player.bag.resize(Items.BAG_SIZE)
@@ -285,12 +352,20 @@ func _begin(continue_game: bool = false, class_id: String = "") -> void:
 		kills = int(saved.get("kills",0))
 		elapsed = float(saved.get("time",0))
 		seed_value = int(saved.get("seed",seed_value))
+		var world: Dictionary = saved.get("world",{})
+		run_seed = int(world.get("run_seed",seed_value))
+		for key in world.get("visited",[]): visited[key] = true
+		var kept: Array = world.get("stash",[])
+		for i in mini(kept.size(),Zones.STASH_SIZE): stash[i] = kept[i]
+		player.quests = world.get("quests",{}).duplicate()
+		place = world.get("area",{"kind":"street","level":number,"arrive":"start"})
 	state = "play"
 	panels.character = false; panels.inventory = false
 	held = null; loot_feed.clear(); level_banner = 0
 	keys.clear(); attack_held = false; pointer_active = false
+	if not player.has("quests"): player.quests = {}
 	_recalc()
-	_generate(number)
+	_travel(place.kind,int(place.level),place.get("arrive","start"))
 	_notice("Your descent continues." if not saved.is_empty() else "Neon Row, 1989. Find the subway entrance.")
 	if saved.is_empty(): _feed("%s learned: %s" % [Classes.info(self).name,Classes.SKILLS[Classes.skill_ids(self)[0]].name],Data.SUN_YELLOW)
 
@@ -414,7 +489,7 @@ func _run_speed() -> float:
 	return RUN_SPEED*(1+stats.move_speed/100.0)
 
 func _request_attack(auto_aim: bool = false) -> void:
-	if state!="play": return
+	if state!="play" or _no_fighting(): return
 	attack_buffer = ATTACK_BUFFER
 	buffered_auto_aim = auto_aim
 	if player.attack<=0 and player.roll<=0: _basic_attack(auto_aim)
@@ -505,7 +580,7 @@ func _apply_elements(e: Dictionary) -> void:
 			_damage_enemy(best,roundi(elements.shock*2.5),false,Items.ELEMENT_COLORS.shock)
 
 func _nova() -> void:
-	if state!="play" or player.nova>0: return
+	if state!="play" or player.nova>0 or _no_fighting(): return
 	if player.mana<NOVA_COST:
 		_notice("Not enough mana for Ember Nova.")
 		_tone(140,0.12,"triangle",0.02)
@@ -553,7 +628,7 @@ func _potion() -> void:
 	_notice("Healing potion used.")
 
 func _hurt(amount: float) -> void:
-	if player.inv>0 or state!="play": return
+	if player.inv>0 or state!="play" or _safe(): return
 	if _random()*100<stats.evade:
 		player.inv = 0.25
 		_float_text(player.pos,"Evaded",Data.NEON_CYAN)
@@ -590,11 +665,23 @@ func _damage_enemy(e: Dictionary,amount: int,crit: bool = false,color: Color = C
 		if e.kind=="boss":
 			_drop_item(e.pos,Items.generate(self,int(player.level)+2,4))
 			for i in 3: _drop_item(e.pos,Items.random_drop(self,6.0))
+		if e.has("quest"): _finish_quest(e)
 		Effects.death(self,e)
 		if e.kind=="boss":
 			Effects.shockwave(self,e.pos,5.0,Color("ffd782"),false)
 			_burst(e.pos,Color("ffd782"),70,5)
 			victory_timer = 0.85
+
+## A side quest's boss is down: the quest is done and pays out.
+func _finish_quest(e: Dictionary) -> void:
+	var quest: Dictionary = Zones.QUESTS[e.quest]
+	player.quests[e.quest] = "done"
+	_drop_item(e.pos,Items.generate(self,int(player.level)+1,3 if _random()<0.7 else 4))
+	_drop_gold(e.pos,60*floor_number)
+	_feed("Quest complete: %s" % quest.title,Data.SUN_YELLOW)
+	_notice("%s is finished. The streets talk." % quest.boss)
+	_tone(1180,0.5,"sine",0.04)
+	_save()
 
 # --- Progression and loot ---------------------------------------------------
 
@@ -674,11 +761,37 @@ func _feed(text: String,color: Color) -> void:
 	loot_feed.append({"text":text,"color":color,"life":4.0})
 	if loot_feed.size()>6: loot_feed.pop_front()
 
+const SERVICES = {"pawn":"Trade at Ray's Pawn", "juice":"Buy potions at Juice Bar", "stash":"Open your stash", "transit":"Read the transit map"}
+
 func _interaction() -> String:
 	for p in props:
 		if p.kind=="chest" and not p.open and p.pos.distance_to(player.pos)<1.7: return "E · Open footlocker"
-	if floor_number<3 and player.pos.distance_to(stairs)<2: return "E · Take the subway to floor %d" % (floor_number+1)
+	var service = _near_service()
+	if not service.is_empty(): return "E · "+SERVICES[service.get("vendor",service.kind)]
+	var exit = _near_exit()
+	if not exit.is_empty(): return "E · "+exit.label
 	return ""
+
+## The vendor stall, stash or transit map within reach.
+func _near_service() -> Dictionary:
+	for p in props:
+		if p.kind in ["vendor","stash","transit"] and p.pos.distance_to(player.pos)<2.0: return p
+	return {}
+
+func _near_exit() -> Dictionary:
+	for exit in exits:
+		if exit.pos.distance_to(player.pos)<2.0: return exit
+	return {}
+
+## Opens a vendor, the stash or the transit map beside the bag.
+func _open_shop(kind: String) -> void:
+	shop = kind
+	panels.character = false
+	panels.inventory = kind!="travel"
+	if kind=="pawn" and stock.is_empty(): stock = Inventory.make_stock(self)
+	state = "inventory"
+	keys.clear(); attack_held = false; walk_target = null
+	_tone(520,0.08,"triangle",0.02)
 
 func _interact() -> void:
 	if state!="play": return
@@ -692,13 +805,22 @@ func _interact() -> void:
 			_burst(p.pos,Color("ffe39b"),25)
 			_tone(900,0.3)
 			return
-	if floor_number<3 and player.pos.distance_to(stairs)<2:
-		var bought = 0
-		while player.potions<3 and player.gold>=15:
-			player.potions += 1; player.gold -= 15; bought += 1
+	var service = _near_service()
+	if not service.is_empty():
+		_open_shop(service.get("vendor","travel" if service.kind=="transit" else service.kind))
+		return
+	var exit = _near_exit()
+	if exit.is_empty(): return
+	var to: Array = exit.to
+	# Heading on toward the next street: patch up and restock on the way down.
+	var onward = to[0]=="subway" and to[2]=="west"
+	var bought = 0
+	if onward:
+		while player.potions<3 and player.gold>=Zones.POTION_PRICE:
+			player.potions += 1; player.gold -= Zones.POTION_PRICE; bought += 1
 		player.hp = minf(player.max_hp,player.hp+roundi(player.max_hp*0.35))
-		_generate(floor_number+1)
-		_notice("Entered %s%s · Progress saved" % [Data.FLOOR_NAMES[floor_number-1]," · Bought %d potions" % bought if bought else ""])
+	_travel(to[0],int(to[1]),to[2])
+	if bought: _notice("%s · Bought %d potions" % [Zones.name(to[0],int(to[1])),bought])
 
 # --- Feedback ---------------------------------------------------------------
 
@@ -730,12 +852,13 @@ func _toggle_panel(name: String) -> void:
 	_panels_changed()
 
 func _close_panels() -> void:
-	panels.character = false; panels.inventory = false
+	panels.character = false; panels.inventory = false; shop = ""
 	_panels_changed()
 
 func _panels_changed() -> void:
 	if not panels.inventory: Inventory.stow_held(self)
-	state = "inventory" if panels.character or panels.inventory else "play"
+	if panels.character or not panels.inventory: shop = ""
+	state = "inventory" if panels.character or panels.inventory or shop!="" else "play"
 	keys.clear(); attack_held = false
 	attack_buffer = 0; screen_velocity = Vector2.ZERO
 	walk_target = null
@@ -773,8 +896,9 @@ func _input(event: InputEvent) -> void:
 				_activate(buttons[i].id,right,event.shift_pressed)
 				return
 		if state=="inventory":
-			# A click on the open world while holding an item drops it on the ground.
-			if held!=null and not right and not hud_view.inventory_view.covers(pointer): Inventory.drop_held(self)
+			# A held item dropped on the Pawn Shop sells; on the open world it drops.
+			if held!=null and not right and shop=="pawn" and hud_view.inventory_view.shop_rect().has_point(pointer): Inventory.sell_held(self)
+			elif held!=null and not right and not hud_view.inventory_view.covers(pointer): Inventory.drop_held(self)
 			return
 		if state=="play" and right:
 			pointer_active = true
@@ -819,8 +943,26 @@ func _activate(id: String,right: bool = false,shift: bool = false) -> void:
 	match parts[0]:
 		"bag":
 			var index = int(parts[1])
-			if right: Inventory.equip_from_bag(self,index)
+			if right and shop=="stash": Inventory.to_stash(self,index)
+			elif right and shop=="pawn": Inventory.sell(self,index)
+			elif right: Inventory.equip_from_bag(self,index)
 			else: Inventory.click_bag(self,index,shift)
+			return
+		"stash":
+			var index = int(parts[1])
+			if right: Inventory.from_stash(self,index)
+			else: Inventory.click_stash(self,index)
+			return
+		"stock":
+			Inventory.buy(self,int(parts[1]))
+			return
+		"travel":
+			var places = Zones.destinations()
+			var index = int(parts[1])
+			if not right and index<places.size() and visited.has(places[index].key):
+				var place: Dictionary = places[index]
+				_close_panels()
+				_travel(place.kind,place.level,place.arrive)
 			return
 		"equip":
 			if right: Inventory.unequip(self,parts[1])
@@ -852,6 +994,8 @@ func _activate(id: String,right: bool = false,shift: bool = false) -> void:
 		"pause", "resume": _pause()
 		"inventory", "close_inventory", "toggle_inventory": _inventory()
 		"close_character", "toggle_character": _character()
+		"close_shop": _close_panels()
+		"buy_potion": Inventory.buy_potion(self)
 		"toggle_map": map_visible = not map_visible
 		"sort": Inventory.sort(self)
 		"slash": _request_attack(true)

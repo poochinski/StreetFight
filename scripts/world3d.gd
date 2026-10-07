@@ -67,7 +67,7 @@ func setup(game) -> void:
 		materials[key] = m
 
 func _theme() -> Dictionary:
-	return Data.FLOOR_THEMES[clampi(g.floor_number-1, 0, Data.FLOOR_THEMES.size()-1)]
+	return g.theme()
 
 static func v3(p: Vector2, y: float = 0.0) -> Vector3:
 	return Vector3(p.x, y, p.y)
@@ -116,7 +116,7 @@ func build() -> void:
 	env.background_color = Color(0.03, 0.02, 0.06)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(t.glow).lerp(Color(0.3, 0.34, 0.5), 0.8)
-	env.ambient_light_energy = 0.32
+	env.ambient_light_energy = t.get("ambient", 0.32)
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.glow_enabled = true
 	env.glow_intensity = 0.9
@@ -126,14 +126,16 @@ func build() -> void:
 	env.fog_light_color = Color(t.glow).darkened(0.7)
 	env.fog_density = 0.005
 	moon.light_color = Color(0.55, 0.6, 0.95) if t.weather!="ash" else Color(1.0, 0.6, 0.45)
-	moon.light_energy = 0.5
+	moon.light_energy = 0.5 if not t.get("indoor", false) else 0.12
+	hero_light.omni_range = 7.5 if not t.get("indoor", false) else 9.0
 	var count = DungeonGenerator.SIZE/CHUNK
 	for cy in count:
 		for cx in count: _build_chunk(Vector2i(cx, cy), t)
 	_build_markings(t)
 	_build_signs(t)
 	_build_props(t)
-	_build_exit(t)
+	_build_exits(t)
+	if t.get("indoor", false): _build_ceiling_lights(t)
 	_build_roofs()
 	for id in ["samurai", "gunslinger", "synth_mage"]:
 		if not portraits.has(id): _make_portrait(id)
@@ -222,6 +224,9 @@ func _ground_cell(st: SurfaceTool, c: Vector2i, t: Dictionary) -> void:
 				"rubble": col = Color(t.rubble).lightened(0.03*(hv%3))
 				"pavers": col = t.pavers if (c.x+c.y)%2==0 else Color(t.pavers).lightened(0.07)
 				"parking": col = t.lot.darkened(0.15).lerp(t.asphalt[0], 0.5)
+				"water":
+					_flat(st, x0, z0, x0+1, z0+1, -0.12, Color(t.get("water", Color("1a3a4a"))).lightened(0.03*(hv%3)))
+					return
 			_flat(st, x0, z0, x1(x0), z0+1, 0.0, col)
 		_:
 			match style:
@@ -233,7 +238,17 @@ func _ground_cell(st: SurfaceTool, c: Vector2i, t: Dictionary) -> void:
 				"carpet": _flat(st, x0, z0, x0+1, z0+1, 0.01, Color("1c1430").lightened(0.03*(hv%3)))
 				"tile": _flat(st, x0, z0, x0+1, z0+1, 0.01, Color("3d6b6e") if (c.x+c.y)%3!=0 else Color("c87a9a"))
 				"threshold": _flat(st, x0, z0, x0+1, z0+1, 0.01, Color("3c3a42"))
-				_: _flat(st, x0, z0, x0+1, z0+1, 0.01, Color("4a4a52").lightened(0.03*(hv%3)))
+				"rail":
+					_flat(st, x0, z0, x0+1, z0+1, -0.25, t.floor.rail[hv%2])
+					# Sleepers across, two steel rails along the track.
+					_flat(st, x0+0.1, z0+0.3, x0+0.9, z0+0.45, -0.24, Color("3a2a20"))
+					_flat(st, x0+0.1, z0+0.8, x0+0.9, z0+0.95, -0.24, Color("3a2a20"))
+					if c.y%4==0 or c.y%4==2:
+						_box(st, Vector3(x0, -0.25, z0+0.6), Vector3(x0+1, -0.17, z0+0.68), Color("b8bcc4"), Color("6a6e78"))
+				_:
+					var tiles: Dictionary = t.get("floor", {})
+					if tiles.has(style): _flat(st, x0, z0, x0+1, z0+1, 0.01, tiles[style][(c.x+c.y)%2])
+					else: _flat(st, x0, z0, x0+1, z0+1, 0.01, Color("4a4a52").lightened(0.03*(hv%3)))
 
 func x1(x0: float) -> float:
 	return x0+1.0
@@ -242,6 +257,7 @@ func x1(x0: float) -> float:
 ## true if it added anything glowing.
 func _building_cell(st: SurfaceTool, glow: SurfaceTool, c: Vector2i, t: Dictionary) -> bool:
 	var h = DungeonGenerator.solid_height(g, c)/PX
+	if t.get("indoor", false): return _inner_wall(st, glow, c, h, t)
 	var style = _h(c.x/5, c.y/5, g.floor_number)%t.buildings.size()
 	var pal: Array = t.buildings[style]
 	var x0 = float(c.x); var z0 = float(c.y)
@@ -279,6 +295,43 @@ func _building_cell(st: SurfaceTool, glow: SurfaceTool, c: Vector2i, t: Dictiona
 			_face(target, center+out+along*side*0.24, along, n, 0.14, 1.95, 2.75, col)
 			glowing = glowing or state<3
 	return glowing
+
+## An inside wall: plain painted block, a coloured band at waist height and
+## now and then a lit poster or vent. Returns true if it added anything glowing.
+func _inner_wall(st: SurfaceTool, glow: SurfaceTool, c: Vector2i, h: float, t: Dictionary) -> bool:
+	var x0 = float(c.x); var z0 = float(c.y)
+	var hv0 = _h(c.x, c.y, 5)
+	var wall: Color = Color(t.wall).darkened(0.04*(hv0%3))
+	_box(st, Vector3(x0, 0, z0), Vector3(x0+1, h, z0+1), t.wall_top, wall)
+	var glowing = false
+	for face in [Vector2i.DOWN, Vector2i.RIGHT, Vector2i.UP, Vector2i.LEFT]:
+		if not g.cells.has(c+face): continue
+		var n = Vector3(face.x, 0, face.y)
+		var along = Vector3(-face.y, 0, face.x)
+		var center = Vector3(x0+0.5, 0, z0+0.5)+n*0.51
+		_face(st, center, along, n, 0.5, 0.0, 0.12, Color(t.wall).darkened(0.5))
+		if h>0.6: _face(st, center, along, n, 0.5, 0.42, 0.56, t.band)
+		var hv = _h(c.x, c.y, face.x*3+face.y)
+		if h>=DungeonGenerator.FACADE_HEIGHT/PX-0.01 and hv%9==0:
+			var col: Color = t.neon[hv%t.neon.size()] if t.has("neon") else t.band
+			_face(glow, center+n*0.01, along, n, 0.3, 1.0, 1.7, Color(col).lerp(Color.WHITE, 0.2)*0.9)
+			glowing = true
+	return glowing
+
+## Dim ceiling lights over each room of an indoor area.
+func _build_ceiling_lights(t: Dictionary) -> void:
+	for z in g.rooms:
+		var r: Rect2i = z.rect
+		var step = 9
+		for y in range(r.position.y+step/2, r.end.y, step):
+			for x in range(r.position.x+step/2, r.end.x, step):
+				var light = OmniLight3D.new()
+				light.light_color = t.light
+				light.light_energy = 1.3 if z.role!="safe" else 1.8
+				light.omni_range = 8.0
+				light.position = Vector3(x+0.5, 2.6, y+0.5)
+				level.add_child(light)
+				if _h(x, y, 9)%5==0: flickers.append({"node":light, "seed":_h(x, y), "energy":light.light_energy})
 
 ## A flat rectangle on a wall face: half-width w along the wall, from height y0 to y1.
 func _face(st: SurfaceTool, center: Vector3, along: Vector3, n: Vector3, w: float, y0: float, y1: float, color: Color) -> void:
@@ -411,11 +464,26 @@ func _build_props(t: Dictionary) -> void:
 		prop_nodes[pr] = node
 		if node.has_meta("flicker"): flickers.append({"node":node.get_meta("flicker"), "seed":pr.seed, "energy":node.get_meta("flicker").light_energy})
 
-func _build_exit(t: Dictionary) -> void:
-	if g.floor_number>=3: return
-	var node = models.subway(t)
-	node.position = v3(g.stairs)
-	level.add_child(node)
+## Subway stairs, doorways into side areas and the ways back out.
+func _build_exits(t: Dictionary) -> void:
+	for exit in g.exits:
+		var node: Node3D
+		match exit.kind:
+			"subway":
+				node = models.subway(t)
+				node.position = v3(exit.pos)
+			"stairs":
+				node = models.subway(t, "EXIT")
+				node.position = v3(exit.pos)
+				node.rotation.y = 0.0 if exit.face.y>0 else PI
+			"door", "gate":
+				node = models.doorway(exit, t, exit.kind=="gate" or exit.get("zone", "")=="park")
+				# Street doorways sit on the building front; the way out of a
+				# side area stands at its edge.
+				var at: Vector2 = exit.pos-exit.face*0.5 if exit.has("wall") else exit.pos-exit.face*0.45
+				node.position = v3(at)
+				Models.face(node, exit.face)
+		if node: level.add_child(node)
 
 # --- Hero portraits for the HUD, class cards and character page --------------------
 
