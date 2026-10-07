@@ -17,6 +17,12 @@ func run() -> void:
 	await shot(g.arrivals.door+Vector2(2,0), "park-return")
 	g._toggle_panel("quests"); await capture("quests")
 	g._toggle_panel("companion"); await capture("companion")
+	g._close_panels()
+	g._gain_xp(g._xp_needed()); g.level_banner=0
+	g._character(); g.spend_point("strength",2); g.spend_point("vitality",3)
+	await capture("pending-stats")
+	g._activate("settings"); g._activate("save_game")
+	await capture("settings-save")
 	quit()
 func shot(at: Vector2, name: String) -> void:
 	g.notice_time=0; g.loot_feed.clear()

@@ -161,7 +161,7 @@ func _shop_page(r: Rect2) -> void:
 
 func _character_page(r: Rect2) -> void:
 	var player = g.player
-	var s = g.stats
+	var s = g.preview_stats()
 	ui.panel(r, true)
 	var x = r.position.x
 	var y = r.position.y
@@ -173,7 +173,7 @@ func _character_page(r: Rect2) -> void:
 	var derived_values = {
 		"strength":"%d – %d" % [roundi(s.damage_min), roundi(s.damage_max)],
 		"dexterity":"%d%%   %d%%" % [roundi(s.crit), roundi(s.evade)],
-		"focus":str(roundi(g._nova_damage())),
+		"focus":str(roundi(roundi((s.damage_min+s.damage_max)/2+s.element_total)*2.8*s.nova_power)),
 		"vitality":str(roundi(s.max_hp)),
 	}
 	var row_y = y+116
@@ -206,13 +206,25 @@ func _character_page(r: Rect2) -> void:
 	_vital_box(Rect2(r.end.x-172, bottom, 148, 26), "MP", "%d / %d" % [floori(player.mana), roundi(s.max_mana)], Data.MANA)
 	var points_rect = Rect2(x+70, bottom+32, r.size.x-140, 22)
 	ui.rect(points_rect, Color("0a0514e6"))
-	ui.rect(points_rect, Color(Data.UPGRADE if player.points>0 else Data.PANEL_EDGE, 0.8), false, 1)
+	ui.rect(points_rect, Color(Data.UPGRADE if g.remaining_stat_points()>0 else Data.PANEL_EDGE, 0.8), false, 1)
 	ui.text("STAT POINTS", Vector2(points_rect.position.x+14, points_rect.position.y+4), 11, Data.SUN_YELLOW, ui.LEFT, ui.font_bold)
-	ui.text(str(player.points), Vector2(points_rect.end.x-14, points_rect.position.y+3), 13, Data.UPGRADE if player.points>0 else Data.INK, ui.RIGHT, ui.font_bold)
+	ui.text(str(g.remaining_stat_points()), Vector2(points_rect.end.x-14, points_rect.position.y+3), 13, Data.UPGRADE if g.remaining_stat_points()>0 else Data.INK, ui.RIGHT, ui.font_bold)
+
+	if not g.pending_stats.is_empty():
+		var confirm = Rect2(x+24, bottom+30, 30, 26)
+		var cancel = Rect2(r.end.x-54, bottom+30, 30, 26)
+		ui.button("confirm_stats", confirm, "")
+		ui.button("cancel_stats", cancel, "")
+		var at = confirm.get_center()
+		ui.line(at+Vector2(-8,0), at+Vector2(-2,6), Data.UPGRADE, 3)
+		ui.line(at+Vector2(-2,6), at+Vector2(9,-7), Data.UPGRADE, 3)
+		at = cancel.get_center()
+		ui.line(at+Vector2(-6,-6), at+Vector2(6,6), Data.DOWNGRADE, 3)
+		ui.line(at+Vector2(-6,6), at+Vector2(6,-6), Data.DOWNGRADE, 3)
 
 func _stat_row(key: String, origin: Vector2, panel_width: float, derived: String) -> void:
 	var info = STAT_INFO[key]
-	var s = g.stats
+	var s = g.preview_stats()
 	var center = origin+Vector2(46, 30)
 	ui.circle(center, 24, Color("0a0514"))
 	ui.ring(center, 24, Color("b8925a"), 2.5)
@@ -234,7 +246,9 @@ func _stat_row(key: String, origin: Vector2, panel_width: float, derived: String
 	ui.text(info.derived, Vector2(derived_label.get_center().x, derived_label.position.y+1), 10, Data.SUN_YELLOW, ui.CENTER, ui.font_bold)
 	_value_box(derived_rect)
 	ui.text(derived, Vector2(derived_rect.get_center().x, derived_rect.position.y+6), 16, Data.CHROME, ui.CENTER, ui.font_bold)
-	ui.plus_button("stat:"+key, Rect2(origin.x+panel_width-44, origin.y+24, 26, 26), g.player.points>0)
+	ui.plus_button("stat:"+key, Rect2(origin.x+panel_width-44, origin.y+8, 26, 26), g.remaining_stat_points()>0)
+	if g.pending_stats.get(key,0)>0:
+		ui.button("stat_minus:"+key, Rect2(origin.x+panel_width-44, origin.y+38, 26, 24), "−", false, 17)
 	var row = Rect2(origin+Vector2(18, 0), Vector2(panel_width-66, 56))
 	if row.has_point(g.pointer) and g.held==null:
 		hovered_source = "stat:"+key

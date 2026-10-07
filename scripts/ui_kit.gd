@@ -310,6 +310,11 @@ func icon(kind: String, center: Vector2, size: float, color: Color) -> void:
 			else:
 				line(center+Vector2(5, -5)*s, center+Vector2(11, 5)*s, Data.DOWNGRADE, 2*s)
 				line(center+Vector2(11, -5)*s, center+Vector2(5, 5)*s, Data.DOWNGRADE, 2*s)
+		"settings":
+			ring(center, 6*s, color, 3*s)
+			for i in 8:
+				var dir = Vector2.from_angle(i*TAU/8)
+				line(center+dir*6*s, center+dir*10*s, color, 3*s)
 		"pause":
 			rect(Rect2(center+Vector2(-6, -8)*s, Vector2(4, 16)*s), color)
 			rect(Rect2(center+Vector2(2, -8)*s, Vector2(4, 16)*s), color)

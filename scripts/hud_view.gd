@@ -142,7 +142,7 @@ func _top_right(inventory_open: bool) -> void:
 	var w = _screen().x
 	var sound = Rect2(w-82, 12, 30, 30)
 	var pause = Rect2(w-46, 12, 30, 30)
-	for spec in [["sound", sound, "sound"], ["pause", pause, "pause"]]:
+	for spec in [["sound", sound, "sound"], ["settings", pause, "settings"]]:
 		var r: Rect2 = spec[1]
 		var hovered = r.has_point(g.pointer)
 		ui.rect(r, Color("2a1648") if hovered else Color("100820e6"))
@@ -708,16 +708,18 @@ func _modal() -> void:
 	var paused = g.state=="paused"
 	var won = g.state=="victory"
 	ui.text("T A K E   A   B R E A T H" if paused else "T H E   E M B E R S   B U R N   B R I G H T" if won else "T H E   D E P T H S   C L A I M   A N O T H E R", o, 10, Data.NEON_CYAN, ui.LEFT, ui.font_bold)
-	ui.chrome("Game Paused" if paused else "The Warden Has Fallen" if won else "Your Light Fades", o+Vector2(0, 22), 32)
+	ui.chrome("Settings" if paused else "The Warden Has Fallen" if won else "Your Light Fades", o+Vector2(0, 22), 32)
 	ui.text("The depths can wait." if paused else "You freed the Ember Depths." if won else "A new adventurer will follow your footsteps.", o+Vector2(0, 74), 13, Data.INK)
 	if paused:
 		ui.button("resume", Rect2(o+Vector2(0, 112), Vector2(400, 48)), "RETURN TO THE DEPTHS", true, 15)
-		ui.button("restart", Rect2(o+Vector2(0, 172), Vector2(400, 34)), "NEW ADVENTURE", false, 12)
+		ui.button("save_game", Rect2(o+Vector2(0, 168), Vector2(400, 34)), "SAVE GAME", false, 13)
+		ui.button("restart", Rect2(o+Vector2(0, 210), Vector2(400, 30)), "NEW ADVENTURE", false, 12)
+		ui.text(g.save_status, o+Vector2(200, 247), 12, Data.UPGRADE if g.save_status=="Game saved." else Data.DOWNGRADE, ui.CENTER)
 	else:
 		ui.text("Level %d  ·  %d foes defeated  ·  %d gold  ·  %dm %ds" % [player.level, g.kills, player.gold, int(g.elapsed)/60, int(g.elapsed)%60], o+Vector2(0, 104), 13, Data.SUN_YELLOW, ui.LEFT, ui.font_bold)
 		ui.button("restart", Rect2(o+Vector2(0, 150), Vector2(400, 48)), "NEW ADVENTURE", true, 15)
-	var help = ["Progress is saved when you enter a floor.", "Click to move and attack  ·  Shift-click attacks in place  ·  WASD also moves", "Right click / 1–4 skills  ·  Space dodge  ·  R potion  ·  E interact",
-		"C character page  ·  I inventory  ·  Esc pause"]
+	var help = ["Autosaves on travel, level-up and confirmed stat changes.", "Click to move and attack  ·  Shift-click attacks in place  ·  WASD also moves", "Right click / 1–4 skills  ·  Space dodge  ·  R potion  ·  E interact",
+		"C character page  ·  I inventory  ·  Esc settings"]
 	for i in help.size():
-		ui.text(help[i], Vector2(size.x/2, o.y+240+i*20), 11, Data.INK_MUTED, ui.CENTER)
-	ui.button("quit", Rect2(o+Vector2(0, 336), Vector2(400, 30)), "QUIT TO DESKTOP", false, 11)
+		ui.text(help[i], Vector2(size.x/2, o.y+272+i*18), 11, Data.INK_MUTED, ui.CENTER)
+	ui.button("quit", Rect2(o+Vector2(0, 356), Vector2(400, 30)), "QUIT TO DESKTOP", false, 11)

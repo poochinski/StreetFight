@@ -28,6 +28,7 @@ static func run(g) -> void:
 	_click_to_move(g,check)
 	_elites(g,check)
 	_zones(g,check)
+	_save_features(g,check)
 	g._begin()
 	g._activate("toggle_quests")
 	check.call(g.state=="inventory" and g.panels.quests, "Quest button opens a paused quest panel")
@@ -332,8 +333,9 @@ static func _combat(g, check: Callable) -> void:
 	check.call(g.player.level==2 and g.player.max_hp==140 and g.player.points==5,"Leveling grants health and stat points")
 	var before_points = g._damage()
 	g._activate("stat:strength")
-	check.call(g._damage()>before_points and g.player.points==4,"Spending Strength raises damage")
+	check.call(g._damage()==before_points and g.remaining_stat_points()==4 and g.preview_stats().damage_min>g.stats.damage_min,"Strength allocation previews without spending")
 	g._activate("stat:vitality",false,true)
+	g.confirm_stat_points()
 	check.call(g.player.points==0 and g.player.max_hp==140+16 and g.player.hp==g.player.max_hp,"Shift-click spends several points; Vitality raises health")
 	var enemy = g._spawn_enemy("imp",g.player.pos+Vector2(1,0))
 	enemy.hp = 200.0; enemy.max_hp = 200.0; enemy.attack = 100.0
@@ -663,13 +665,13 @@ static func _progression(g, check: Callable) -> void:
 	check.call(boss_found and g.drops.any(func(d): return d.kind=="item" and int(d.item.rarity)==4),"The Warden drops a Legendary item")
 	g.enemies.clear()
 	g._update(0.9)
-	check.call(g.state=="victory" and g._load_save().is_empty(),"Boss victory clears checkpoint")
+	check.call(g.state=="victory" and not g._load_save().is_empty(),"Victory preserves the last save")
 	g._begin()
 	g.player.inv = 0
 	g.player.attributes.dexterity = 0
 	g._recalc()
 	g._hurt(9999)
-	check.call(g.state=="defeat" and g._load_save().is_empty(),"Defeat clears checkpoint")
+	check.call(g.state=="defeat" and not g._load_save().is_empty(),"Defeat preserves the last save")
 
 static func _items(g, check: Callable) -> void:
 	g._begin()
@@ -802,3 +804,55 @@ static func _inventory(g, check: Callable, finished: Array) -> void:
 	g.player.equipment.boots = Items.generate(g,1,1,"boots")
 	check.call(not Inventory.store(g,spare),"A full bag refuses new items")
 	finished.append(true)
+
+static func _save_features(g, check: Callable) -> void:
+	g._begin()
+	g.run_seed = 777
+	g._travel("street",1,"start")
+	g.enemies.clear()
+	var mall = g.exits.filter(func(e): return e.to[0]=="mall")[0]
+	g.player.pos = mall.pos
+	g._reveal()
+	var street_seen = g.seen.duplicate()
+	g._travel("mall",1,"door")
+	var mall_seen = g.seen.duplicate()
+	g._travel("street",1,"door:mall")
+	check.call(street_seen.keys().all(func(c): return g.seen.has(c)), "Street exploration survives a mall round trip")
+	g._travel("mall",1,"door")
+	check.call(mall_seen.keys().all(func(c): return g.seen.has(c)), "Mall exploration is stored separately")
+	g._gain_xp(g._xp_needed())
+	var saved = g._load_save()
+	check.call(saved.stats.level==g.player.level and saved.stats.points==g.player.points, "Level-up autosaves new level and stat points")
+	var attributes = g.player.attributes.duplicate()
+	var points = g.player.points
+	g._character()
+	g.spend_point("strength",2)
+	g.spend_point("vitality",3)
+	check.call(g.remaining_stat_points()==0 and g.pending_stats.size()==2, "Last available point remains pending for confirmation")
+	g.refund_pending_point("strength")
+	g.spend_point("focus")
+	check.call(g.pending_stats.strength==1 and g.pending_stats.focus==1, "Minus reallocates an unconfirmed point")
+	g._save()
+	check.call(g._load_save().stats.attributes==attributes and g._load_save().stats.points==points, "Saving never commits pending allocations")
+	g._activate("cancel_stats")
+	check.call(g.pending_stats.is_empty() and g.player.attributes==attributes and g.remaining_stat_points()==points, "Cancel restores every available point")
+	g.spend_point("vitality")
+	g._close_panels()
+	check.call(g.pending_stats.is_empty() and g.player.attributes==attributes, "Closing character discards unconfirmed changes")
+	g._character(); g.spend_point("strength",2); g.confirm_stat_points()
+	check.call(g.player.attributes.strength==attributes.strength+2 and g.player.points==points-2 and g.pending_stats.is_empty(), "Confirm commits exactly the allocated points")
+	g.refund_pending_point("strength",5)
+	check.call(g.player.attributes.strength==attributes.strength+2, "Minus cannot refund previously confirmed points")
+	g._close_panels()
+	var position = g.player.pos
+	g._activate("settings"); g._activate("save_game")
+	check.call(g.state=="paused" and g.save_status=="Game saved.", "Settings save reports success while paused")
+	g._begin(true)
+	check.call(g.player.pos.distance_to(position)<0.001 and g.area.kind=="mall", "Continue restores saved area and position")
+	g._travel("street",1,"door:mall")
+	check.call(street_seen.keys().all(func(c): return g.seen.has(c)), "Other-area exploration survives restarting from save")
+	var original_save = g.save_file
+	g.save_file = "res://previews/missing-save-directory/test.json"
+	check.call(not g._save() and g.save_status.begins_with("Save failed"), "Failed writes are reported instead of claiming success")
+	g.save_file = original_save
+	check.call(not g._load_save().is_empty(), "A failed save leaves the valid checkpoint intact")

@@ -1,5 +1,13 @@
 # Dungeon Crawler — native Godot edition
 
+## Saving and stat allocation — October 7, 2026
+
+Open **Settings** using the top-right gear or Escape, then click **Save Game**. The game also saves on level-up, area travel, and confirming stat allocations. Saves keep your position, character, gear, quests, stash, and revealed minimap cells for every visited area. Leaving the street for the mall and coming back preserves exploration; it also survives quitting and continuing. Enemies and loose ground loot still regenerate when an area is rebuilt. The last checkpoint is retained after defeat or victory.
+
+On the character panel, **+** previews a stat increase and **−** removes only points from the current allocation. Shift adjusts up to five points. The green checkmark commits and saves the allocation; the red X discards it. These controls only appear while an allocation is pending, including when all available points have been assigned. Closing the character panel discards pending changes. Previously confirmed points cannot be refunded.
+
+Save format 4 remains compatible with older format 2 and 3 checkpoints. Older saves begin remembering exploration as areas are visited.
+
 ## Entrance and HUD update — October 7, 2026
 
 - Starlight Mall now has a broad glass frontage, illuminated canopy and marked parking forecourt with a central pedestrian approach.
@@ -55,7 +63,7 @@ The .bat launchers always open the folder they sit in and use the Godot 4.7.2 in
 | M | Minimap |
 | Escape | Close the pages / pause / resume |
 
-On the equipment page: click an item to pick it up and click a slot to put it down or swap; right-click to equip or unequip; Shift-click a bag item to salvage it for gold; click the world while holding an item to drop it. To socket a gem, pick it up and click an item with an empty socket. On the character page, + spends one stat point and Shift + spends five.
+On the equipment page: click an item to pick it up and click a slot to put it down or swap; right-click to equip or unequip; Shift-click a bag item to salvage it for gold; click the world while holding an item to drop it. To socket a gem, pick it up and click an item with an empty socket. On the character page, + previews one stat point and Shift + previews up to five; confirm with the green checkmark.
 
 The mouse works like Diablo or Torchlight: click to move and click enemies to attack; WASD also moves. Heavy hits freeze the action for a few hundredths of a second so they land with weight. Sound starts muted, matching the browser version. Click the speaker button to enable synthesized combat, healing, loot, and level-up effects.
 
@@ -152,7 +160,7 @@ Three randomly generated city floors, melee and ranged enemies, a boss with a te
 
 Heading down into the subway toward the next street heals 35% of maximum health and buys potions up to three for 15 gold each. Shift-click spare items in the bag to salvage them for gold. Defeat the Ash Warden in Sunset Plaza to win. Move outside its red attack ring or dodge when the slam lands.
 
-The game saves each time you enter a place, to Godot's local user-data folder (`%APPDATA%/Godot/app_userdata/Dungeon Crawler/descent.json`). Continue puts you back where you entered, with your stats, stat points, equipment, bag, stash, side quests and the places you have found. Checkpoints from before the city zones load on their floor's street. Defeat and victory remove the checkpoint.
+The game saves locally to `%APPDATA%/Godot/app_userdata/Dungeon Crawler Combat/descent.json`. See the saving and stat allocation notes above for manual saves, autosaves, remembered exploration, and compatibility with older checkpoints.
 
 ## Places in the city
 
