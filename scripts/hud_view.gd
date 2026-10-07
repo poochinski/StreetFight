@@ -9,6 +9,7 @@ const UiKit = preload("res://scripts/ui_kit.gd")
 const InventoryView = preload("res://scripts/inventory_view.gd")
 const Classes = preload("res://scripts/classes.gd")
 const Elites = preload("res://scripts/elites.gd")
+const Zones = preload("res://scripts/zones.gd")
 
 const ORB_RADIUS = 56.0
 const HOTBAR_SLOT = 48.0
@@ -134,8 +135,9 @@ func _top_right(inventory_open: bool) -> void:
 		ui.icon(spec[2], r.get_center(), 18, Data.CHROME)
 		g.buttons.append({"id":spec[0], "rect":r})
 	if inventory_open: return
-	ui.chrome(Data.FLOOR_NAMES[g.floor_number-1].to_upper(), Vector2(w-96, 12), 15, ui.RIGHT)
-	ui.text("Floor %d of 3  ·  The Ember Depths" % g.floor_number, Vector2(w-96, 34), 10, Data.INK_MUTED, ui.RIGHT)
+	ui.chrome(Zones.name(g.area.kind, g.floor_number).to_upper(), Vector2(w-96, 12), 15, ui.RIGHT)
+	var where = "Safe zone  ·  No fighting" if g._safe() else ("Level %d  ·  %s" % [g.floor_number, "Streets" if g.area.kind=="street" else Zones.street_name(g.floor_number)])
+	ui.text(where, Vector2(w-96, 34), 10, Data.UPGRADE if g._safe() else Data.INK_MUTED, ui.RIGHT)
 	if g.map_visible: _minimap(Vector2(w-114, 152), 84)
 	_quests(Vector2(w-236, 262 if g.map_visible else 70))
 
@@ -166,14 +168,19 @@ func _minimap(center: Vector2, radius: float) -> void:
 		if d.kind=="item" and g.seen.has(Vector2i(d.pos)): mark.call(d.pos, Items.color(d.item), 2.0)
 	for e in g.enemies:
 		if e.hp>0 and e.pos.distance_to(g.player.pos)<7: mark.call(e.pos, Data.DOWNGRADE, 2.2 if e.kind!="boss" else 4.0)
-	if g.seen.has(Vector2i(g.stairs)) and g.floor_number<3:
-		var rel = g.stairs-origin
+	# Exits: cyan for the subway and stairs, pink for doorways, pinned to the rim.
+	for exit in g.exits:
+		if not g.seen.has(Vector2i(exit.pos)): continue
+		var rel = exit.pos-origin
 		var offset = Vector2((rel.x-rel.y)*scale, (rel.x+rel.y)*scale*0.5)
 		if offset.length()>radius-8: offset = offset.normalized()*(radius-8)
 		var s = center+offset
 		var pulse = 4+sin(g.clock*4)*1.2
-		ui.glow(s, 12, Color(Data.NEON_CYAN, 0.5))
-		ui.poly(PackedVector2Array([s+Vector2(0, -pulse), s+Vector2(pulse, 0), s+Vector2(0, pulse), s+Vector2(-pulse, 0)]), Data.NEON_CYAN)
+		var color = Data.NEON_CYAN if exit.kind in ["subway", "stairs"] else Data.NEON_PINK
+		ui.glow(s, 12, Color(color, 0.5))
+		ui.poly(PackedVector2Array([s+Vector2(0, -pulse), s+Vector2(pulse, 0), s+Vector2(0, pulse), s+Vector2(-pulse, 0)]), color)
+	for prop in g.props:
+		if prop.kind in ["vendor", "stash", "transit"] and g.seen.has(Vector2i(prop.pos)): mark.call(prop.pos, Data.UPGRADE, 2.6)
 	var facing = g._iso(Vector2.from_angle(g.display_angle)).normalized()
 	var side = facing.orthogonal()
 	ui.poly(PackedVector2Array([center+facing*7, center-facing*4+side*4.5, center-facing*2, center-facing*4-side*4.5]), Data.NEON_PINK)
@@ -192,9 +199,22 @@ func _quests(origin: Vector2) -> void:
 	ui.line(Vector2(x, y+22), Vector2(x+216, y+22), Color(Data.NEON_PINK, 0.6), 1)
 	var title = "Slay the Ash Warden" if g.floor_number==3 else "The Heart Below"
 	ui.text(title, Vector2(x, y+30), 13, Data.NEON_PINK.lightened(0.2), ui.LEFT, ui.font_bold, 3, Color(0, 0, 0, 0.6))
-	var task = "Defeat the Ash Warden in Sunset Plaza." if g.floor_number==3 else "Find the subway entrance to floor %d." % (g.floor_number+1)
+	var task = "Defeat the Ash Warden in Sunset Plaza." if g.floor_number==3 else "Take the subway to %s." % Zones.street_name(g.floor_number+1)
 	ui.text("–  "+task, Vector2(x, y+50), 11, Data.INK, ui.LEFT, null, 3, Color(0, 0, 0, 0.6))
-	ui.text("–  Foes slain: %d" % g.kills, Vector2(x, y+67), 11, Data.INK_MUTED, ui.LEFT, null, 3, Color(0, 0, 0, 0.6))
+	y += 67
+	# The side quest of this place, and a count of the others still open.
+	var quests: Dictionary = g.player.get("quests", {})
+	if quests.has(g.area.kind):
+		var quest: Dictionary = Zones.QUESTS[g.area.kind]
+		var done = quests[g.area.kind]=="done"
+		ui.text(quest.title+("  ✓" if done else ""), Vector2(x, y+4), 12, Data.UPGRADE if done else Data.SUN_YELLOW.lightened(0.1), ui.LEFT, ui.font_bold, 3, Color(0, 0, 0, 0.6))
+		ui.text("–  "+("Done." if done else quest.task), Vector2(x, y+22), 10, Data.INK, ui.LEFT, null, 3, Color(0, 0, 0, 0.6))
+		y += 42
+	var others = quests.keys().filter(func(k): return k!=g.area.kind and quests[k]=="active").size()
+	if others>0:
+		ui.text("–  Side quests open elsewhere: %d" % others, Vector2(x, y), 10, Data.SUN_YELLOW.darkened(0.15), ui.LEFT, null, 3, Color(0, 0, 0, 0.6))
+		y += 17
+	ui.text("–  Foes slain: %d" % g.kills, Vector2(x, y), 11, Data.INK_MUTED, ui.LEFT, null, 3, Color(0, 0, 0, 0.6))
 
 # --- Enemy plate and boss bar -----------------------------------------------------
 

@@ -154,3 +154,99 @@ static func stow_held(g) -> void:
 		g.player.bag[index] = g.held
 		g.held = null
 	else: drop_held(g)
+
+# --- Food court: the Pawn Shop, the Juice Bar and the stash ----------------------
+
+const PRICE_MULT = 3
+const Zones = preload("res://scripts/zones.gd")
+
+## What the Pawn Shop sells this visit: gear near the hero's level, mostly
+## Uncommon and Rare, the odd Epic.
+static func make_stock(g) -> Array:
+	var out: Array = []
+	for i in Zones.STOCK_SIZE:
+		var roll = g._random()
+		var rarity = 3 if roll<0.08 else 2 if roll<0.45 else 1 if roll<0.85 else 0
+		var item = Items.generate(g, int(g.player.level)+floori(g._random()*3)-1, rarity, ["weapon", "chest", "helmet", "gloves", "boots", "belt", "ring", "amulet", "weapon", "chest", "ring", "helmet"][i])
+		item.price = int(item.value)*PRICE_MULT
+		out.append(item)
+	return out
+
+static func price(item: Dictionary) -> int:
+	return int(item.get("price", int(item.value)*PRICE_MULT))
+
+static func buy(g, index: int) -> void:
+	if index>=g.stock.size() or g.stock[index]==null: return
+	var item: Dictionary = g.stock[index]
+	if g.player.gold<price(item):
+		_refuse(g, "Not enough gold.")
+		return
+	if first_free(g)<0:
+		_refuse(g, "Your bag is full.")
+		return
+	g.player.gold -= price(item)
+	var bought = item.duplicate(true)
+	bought.erase("price")
+	g.player.bag[first_free(g)] = bought
+	g.stock[index] = null
+	g._feed("Bought %s  −%d gold" % [item.name, price(item)], Items.color(item))
+	g._tone(880, 0.12, "sine", 0.03)
+
+## Sells a bag item to the Pawn Shop for its full value.
+static func sell(g, index: int) -> void:
+	var item = g.player.bag[index]
+	if item==null: return
+	g.player.bag[index] = null
+	g.player.gold += int(item.value)
+	g._feed("Sold %s  +%d gold" % [item.name, int(item.value)], Data.GOLD)
+	g._tone(700, 0.08, "sine", 0.02)
+
+static func sell_held(g) -> void:
+	if g.held==null: return
+	g.player.gold += int(g.held.value)
+	g._feed("Sold %s  +%d gold" % [g.held.name, int(g.held.value)], Data.GOLD)
+	g.held = null
+	g._tone(700, 0.08, "sine", 0.02)
+
+static func buy_potion(g) -> void:
+	if g.player.gold<Zones.POTION_PRICE:
+		_refuse(g, "Not enough gold.")
+		return
+	g.player.gold -= Zones.POTION_PRICE
+	g.player.potions += 1
+	g._feed("Health Potion  −%d gold" % Zones.POTION_PRICE, Color("ff8aa0"))
+	g._tone(620, 0.08, "sine", 0.02)
+
+## Left click on a stash slot: pick up, put down or swap, like the bag.
+static func click_stash(g, index: int) -> void:
+	var item = g.stash[index]
+	if g.held!=null and Items.is_gem(g.held) and item!=null and Items.open_sockets(item)>0:
+		socket(g, g.held, item)
+		g.held = null
+		return
+	g.stash[index] = g.held
+	g.held = item
+	if g.held!=null or item!=null: g._tone(280, 0.05, "triangle", 0.015)
+
+## Right click moves an item between the bag and the stash.
+static func to_stash(g, index: int) -> void:
+	var item = g.player.bag[index]
+	if item==null: return
+	var slot = g.stash.find(null)
+	if slot<0:
+		_refuse(g, "Your stash is full.")
+		return
+	g.stash[slot] = item
+	g.player.bag[index] = null
+	g._tone(300, 0.05, "triangle", 0.015)
+
+static func from_stash(g, index: int) -> void:
+	var item = g.stash[index]
+	if item==null: return
+	var slot = first_free(g)
+	if slot<0:
+		_refuse(g, "Your bag is full.")
+		return
+	g.player.bag[slot] = item
+	g.stash[index] = null
+	g._tone(260, 0.05, "triangle", 0.015)

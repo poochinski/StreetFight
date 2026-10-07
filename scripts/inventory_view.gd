@@ -5,6 +5,8 @@ extends RefCounted
 
 const Data = preload("res://scripts/data.gd")
 const Items = preload("res://scripts/items.gd")
+const Inventory = preload("res://scripts/inventory.gd")
+const Zones = preload("res://scripts/zones.gd")
 
 const PANEL_TOP = 64.0
 const PANEL_HEIGHT = 600.0
@@ -48,14 +50,20 @@ func character_rect() -> Rect2:
 func inventory_rect() -> Rect2:
 	return Rect2(ui.c.get_viewport_rect().size.x-14-INVENTORY_WIDTH, PANEL_TOP, INVENTORY_WIDTH, PANEL_HEIGHT)
 
+## The vendor, stash or transit map panel takes the character page's place.
+func shop_rect() -> Rect2:
+	return character_rect()
+
 ## Whether a screen point is over an open panel (clicks there never reach the world).
 func covers(point: Vector2) -> bool:
-	return (g.panels.character and character_rect().grow(4).has_point(point)) or (g.panels.inventory and inventory_rect().grow(4).has_point(point))
+	return (g.panels.character and character_rect().grow(4).has_point(point)) or (g.panels.inventory and inventory_rect().grow(4).has_point(point)) \
+		or (g.shop!="" and shop_rect().grow(4).has_point(point))
 
 func draw() -> void:
 	hovered_item = null
 	hovered_source = ""
-	if g.panels.character: _character_page(character_rect())
+	if g.shop!="": _shop_page(shop_rect())
+	elif g.panels.character: _character_page(character_rect())
 	if g.panels.inventory: _inventory_page(inventory_rect())
 
 ## Tooltips and the held item draw last, above everything else.
@@ -70,6 +78,84 @@ func draw_overlay() -> void:
 		draw_tooltip(hovered_item, g.pointer, hovered_source)
 	elif hovered_source.begins_with("stat:"):
 		draw_stat_help(hovered_source.substr(5), g.pointer)
+
+# --- Food court: Ray's Pawn, the Juice Bar, the stash, the transit map ------------
+
+const SHOP_TITLES = {"pawn":"RAY'S PAWN", "juice":"JUICE BAR", "stash":"STASH", "travel":"TRANSIT MAP"}
+
+func shop_slot_rect(index: int) -> Rect2:
+	var r = shop_rect()
+	var columns = 4 if g.shop=="pawn" else BAG_COLUMNS
+	var size = 64.0 if g.shop=="pawn" else BAG_SLOT
+	var width = columns*size+(columns-1)*BAG_GAP
+	var origin = Vector2(r.position.x+(r.size.x-width)/2, r.position.y+110)
+	return Rect2(origin+Vector2(index%columns, index/columns)*(size+BAG_GAP), Vector2(size, size))
+
+func _shop_page(r: Rect2) -> void:
+	ui.panel(r, true)
+	var x = r.position.x
+	var y = r.position.y
+	ui.plate(Rect2(x+22, y+24, r.size.x-84, 34), SHOP_TITLES[g.shop], 18)
+	ui.close_button("close_shop", Rect2(r.end.x-52, y+26, 30, 30))
+	match g.shop:
+		"pawn":
+			ui.text("Ray buys anything and sells what he likes.", Vector2(r.get_center().x, y+72), 11, Data.INK_MUTED, ui.CENTER)
+			for i in g.stock.size():
+				var sr = shop_slot_rect(i)
+				var item = g.stock[i]
+				var hovered = sr.has_point(g.pointer)
+				ui.slot(sr, item, hovered)
+				if item==null:
+					ui.text("SOLD", sr.get_center()-Vector2(0, 6), 9, Color(Data.INK_MUTED, 0.5), ui.CENTER, ui.font_bold)
+					continue
+				art.draw(item, sr.get_center()-Vector2(0, 6), sr.size.x*0.7)
+				var cost = Inventory.price(item)
+				ui.text("%d" % cost, Vector2(sr.get_center().x, sr.end.y-15), 10, Data.GOLD if g.player.gold>=cost else Data.DOWNGRADE, ui.CENTER, ui.font_bold)
+				if hovered and g.held==null:
+					hovered_item = item
+					hovered_source = "shop"
+				g.buttons.append({"id":"stock:%d" % i, "rect":sr})
+			ui.text("Click: buy  ·  Right-click or drop in here: sell", Vector2(r.get_center().x, r.end.y-58), 10, Data.INK_MUTED, ui.CENTER)
+		"juice":
+			ui.text("Fresh-squeezed. Mostly.", Vector2(r.get_center().x, y+72), 11, Data.INK_MUTED, ui.CENTER)
+			art.draw("potion", Vector2(r.get_center().x, y+170), 72)
+			ui.text("Health Potion", Vector2(r.get_center().x, y+222), 15, Color("ff8aa0"), ui.CENTER, ui.font_bold)
+			ui.text("Restores health. You carry %d." % int(g.player.potions), Vector2(r.get_center().x, y+246), 11, Data.INK, ui.CENTER)
+			ui.button("buy_potion", Rect2(r.get_center().x-90, y+276, 180, 34), "BUY  ·  %d GOLD" % Zones.POTION_PRICE, true, 13)
+		"stash":
+			ui.text("Safe storage. It follows you from street to street.", Vector2(r.get_center().x, y+72), 11, Data.INK_MUTED, ui.CENTER)
+			for i in Zones.STASH_SIZE:
+				var sr = shop_slot_rect(i)
+				var item = g.stash[i]
+				var hovered = sr.has_point(g.pointer)
+				ui.slot(sr, item, hovered)
+				if item!=null:
+					art.draw(item, sr.get_center(), sr.size.x*0.8)
+					_socket_pips(item, sr)
+					if hovered and g.held==null:
+						hovered_item = item
+						hovered_source = "stash"
+				g.buttons.append({"id":"stash:%d" % i, "rect":sr})
+			ui.text("Right-click moves items between the bag and the stash.", Vector2(r.get_center().x, r.end.y-58), 10, Data.INK_MUTED, ui.CENTER)
+		"travel":
+			ui.text("Ride to anywhere you have been.", Vector2(r.get_center().x, y+72), 11, Data.INK_MUTED, ui.CENTER)
+			var row = y+100
+			var places = Zones.destinations()
+			for i in places.size():
+				var place: Dictionary = places[i]
+				var known = g.visited.has(place.key)
+				var here = place.kind==g.area.kind and place.level==g.floor_number and place.key!="foodcourt"
+				var br = Rect2(x+30, row, r.size.x-60, 30)
+				if known and not here:
+					ui.button("travel:%d" % i, br, place.name.to_upper(), place.key=="foodcourt", 12)
+				else:
+					ui.rect(br, Color("0a0514e6"))
+					ui.rect(br, Color(Data.PANEL_EDGE, 0.5), false, 1)
+					ui.text(("YOU ARE HERE" if here else "? ? ?") if not (here and not known) else "YOU ARE HERE", br.get_center()-Vector2(0, 7), 11, Data.INK_MUTED, ui.CENTER, ui.font_bold)
+				row += 36
+	if g.shop!="travel":
+		ui.icon("gold", Vector2(x+34, r.end.y-22), 20, Data.GOLD)
+		ui.text(str(g.player.gold), Vector2(x+50, r.end.y-30), 14, Data.GOLD, ui.LEFT, ui.font_bold)
 
 # --- Character page -----------------------------------------------------------
 
@@ -359,7 +445,10 @@ func tooltip_lines(item: Dictionary, source: String) -> Array:
 			for change in changes:
 				_line(lines, change.label, 12, Data.INK_MUTED, null, change.text, Data.UPGRADE if change.better else Data.DOWNGRADE, 2)
 	var hint = {"bag":"Click to pick up · Right-click to equip · Shift-click to salvage",
-		"equipped":"Click to pick up · Right-click to unequip", "ground":"Click to pick up"}.get(source, "")
+		"equipped":"Click to pick up · Right-click to unequip", "ground":"Click to pick up",
+		"shop":"Click to buy for %d gold" % Inventory.price(item), "stash":"Click to pick up · Right-click to move to the bag"}.get(source, "")
+	if source=="bag" and g.shop=="pawn": hint = "Right-click to sell for %d gold" % int(item.value)
+	if source=="bag" and g.shop=="stash": hint = "Click to pick up · Right-click to stash"
 	if Items.is_gem(item) and source=="bag": hint = "Click it, then click an item with an empty socket"
 	if hint!="": _line(lines, hint, 10, Color(Data.INK_MUTED, 0.85), null, "", Data.INK_MUTED, 8)
 	return lines

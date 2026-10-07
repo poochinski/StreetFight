@@ -477,6 +477,7 @@ func prop(pr: Dictionary, t: Dictionary) -> Node3D:
 ## Shop and home furniture that faces into the room.
 func _indoor(root: Node3D, pr: Dictionary, t: Dictionary) -> void:
 	var front: Vector2 = Vector2(pr.get("face", Vector2i.DOWN))
+	var seed: int = pr.get("seed", 0)
 	var body = Node3D.new()
 	face(body, front)
 	root.add_child(body)
@@ -525,8 +526,192 @@ func _indoor(root: Node3D, pr: Dictionary, t: Dictionary) -> void:
 		"cart":
 			_part(body, "box", Vector3(0.5, 0.35, 0.7), Vector3(0, 0.55, 0), _material(Color("9aa0a8"), 0.3, 0.7))
 			for k in 4: _part(body, "cyl", Vector3(0.05, 0.04, 0), Vector3((k%2-0.5)*0.4, 0.06, (k/2-0.5)*0.55), dark_material()).rotation.z = PI/2
+		"vendor":
+			# A food court stall: counter, striped awning, neon name and the
+			# shopkeeper behind the counter.
+			var juice = pr.get("vendor", "")=="juice"
+			var color = Color("5dff8f") if juice else Color("ffb438")
+			_part(body, "box", Vector3(1.9, 0.8, 0.5), Vector3(0, 0.4, 0.25), _material(Color("3a2a4a"), 0.4, 0.3))
+			_part(body, "box", Vector3(1.95, 0.05, 0.6), Vector3(0, 0.82, 0.25), _material(Color("e8e0f0"), 0.2, 0.5))
+			_part(body, "box", Vector3(1.9, 0.04, 0.02), Vector3(0, 0.62, 0.51), _glow_material(color, 1.8), false)
+			for k in 6:
+				_part(body, "box", Vector3(0.33, 0.04, 0.7), Vector3(-0.83+k*0.33, 2.0, 0.1), _material(color if k%2==0 else Color("f0e8f0"), 0.6)).rotation.x = 0.35
+			_part(body, "box", Vector3(1.9, 1.9, 0.08), Vector3(0, 1.0, -0.45), _material(Color("231a33"), 0.7))
+			var shelf = Color("ff8aa0") if juice else Color("9aa0a8")
+			for k in 5: _part(body, "box", Vector3(0.18, 0.26, 0.14), Vector3(-0.7+k*0.35, 1.25, -0.35), _glow_material(shelf, 0.6) if juice else _material(shelf, 0.4, 0.6))
+			_sign(body, "JUICE BAR" if juice else "RAY'S PAWN", Vector3(0, 2.35, 0.3), color, 64)
+			var keeper = npc("Mage" if juice else "Knight", Vector2.DOWN)
+			keeper.position = Vector3(0, 0, -0.15)
+			body.add_child(keeper)
+			_light(body, color, 1.6, 4.0, Vector3(0, 1.6, 0.9))
+		"stash":
+			# A wall of lockers with one standing open, the hero's own.
+			for k in 3:
+				var locker = _part(body, "box", Vector3(0.3, 1.5, 0.45), Vector3(-0.31+k*0.31, 0.75, -0.1), _material(Color(["3a6a8a", "2a5a7a", "3a6a8a"][k]), 0.5, 0.4))
+				_part(body, "box", Vector3(0.18, 0.03, 0.01), Vector3(-0.31+k*0.31, 1.3, 0.13), dark_material())
+			_part(body, "box", Vector3(0.96, 0.06, 0.5), Vector3(0, 1.53, -0.1), _glow_material(Color("3ff0ff"), 1.5), false)
+			_sign(body, "STASH", Vector3(0, 1.9, 0.0), Color("3ff0ff"), 56)
+			_light(body, Color("3ff0ff"), 1.2, 3.0, Vector3(0, 1.2, 0.7))
+		"transit":
+			# A lit transit map on a post: fast travel to places you have been.
+			_part(body, "box", Vector3(0.08, 1.0, 0.08), Vector3(0, 0.5, 0), _material(Color("2a2c32"), 0.5, 0.6))
+			_part(body, "box", Vector3(0.9, 0.7, 0.08), Vector3(0, 1.35, 0), _material(Color("1a1e28"), 0.4, 0.4))
+			_part(body, "box", Vector3(0.82, 0.62, 0.02), Vector3(0, 1.35, 0.05), _glow_material(Color("e8f0ff"), 0.9), false)
+			for k in 4:
+				var line = _part(body, "box", Vector3(0.7, 0.025, 0.01), Vector3(0, 1.17+k*0.12, 0.065), _glow_material(SCREEN_COLORS[k], 2.0), false)
+				line.rotation.z = (k-1.5)*0.12
+			_sign(body, "TRANSIT", Vector3(0, 1.95, 0.0), Color("5dff8f"), 48)
+			_light(body, Color(0.7, 1.0, 0.85), 1.2, 3.0, Vector3(0, 1.4, 0.6))
+		"table":
+			var top = _material(Color(["e8e0f0", "ff9ad8", "9ae8ff", "ffe89a"][int(pr.get("color", 0))%4]), 0.4, 0.2)
+			_part(body, "cyl", Vector3(0.38, 0.05, 0), Vector3(0, 0.7, 0), top)
+			_part(body, "cyl", Vector3(0.04, 0.68, 0), Vector3(0, 0.34, 0), _material(Color("9aa0a8"), 0.3, 0.7))
+			for k in 3:
+				var a = k*TAU/3+0.4
+				_part(body, "cyl", Vector3(0.15, 0.05, 0), Vector3(cos(a)*0.6, 0.42, sin(a)*0.6), _material(Color("b03a4a"), 0.5))
+				_part(body, "cyl", Vector3(0.025, 0.4, 0), Vector3(cos(a)*0.6, 0.2, sin(a)*0.6), _material(Color("9aa0a8"), 0.3, 0.7))
+		"planter":
+			_part(body, "box", Vector3(0.9, 0.45, 0.9), Vector3(0, 0.225, 0), _material(Color("c8b8d0"), 0.4))
+			_part(body, "box", Vector3(0.8, 0.04, 0.8), Vector3(0, 0.46, 0), _material(Color("3a2a20"), 1.0))
+			var palm = Node3D.new()
+			palm.position.y = 0.45
+			palm.scale = Vector3.ONE*0.75
+			body.add_child(palm)
+			_palm(palm, {"lean":0.1})
+		"rack":
+			var color: Color = SCREEN_COLORS[int(pr.get("color", 0))%SCREEN_COLORS.size()]
+			_part(body, "box", Vector3(1.8, 0.04, 0.04), Vector3(0, 1.2, 0), _material(Color("c8ccd4"), 0.2, 0.8))
+			for x in [-0.88, 0.88]: _part(body, "cyl", Vector3(0.025, 1.2, 0), Vector3(x, 0.6, 0), _material(Color("c8ccd4"), 0.2, 0.8))
+			for k in 7:
+				var shirt = _part(body, "box", Vector3(0.18, 0.62, 0.36), Vector3(-0.72+k*0.24, 0.86, 0), _material(color.lerp(Color("2a2238"), (k%3)*0.25), 0.8))
+				shirt.rotation.y = 0.15*(k%2)
+		"mannequin":
+			var skin = _material(Color("e8e0d8"), 0.3)
+			var outfit = _material(SCREEN_COLORS[int(pr.get("color", 0))%SCREEN_COLORS.size()].darkened(0.2), 0.7)
+			_part(body, "cyl", Vector3(0.2, 0.04, 0), Vector3(0, 0.02, 0), dark_material())
+			_part(body, "cyl", Vector3(0.025, 0.5, 0), Vector3(0, 0.27, 0), skin)
+			_part(body, "box", Vector3(0.36, 0.55, 0.2), Vector3(0, 0.82, 0), outfit)
+			_part(body, "sphere", Vector3(0.11, 0, 0), Vector3(0, 1.22, 0), skin)
+			for x in [-1, 1]: _part(body, "box", Vector3(0.08, 0.5, 0.08), Vector3(x*0.23, 0.8, 0), outfit).rotation.z = x*0.15
+		"pillar":
+			# A tiled station column with a strip light, floor to ceiling.
+			_part(body, "box", Vector3(0.6, 3.0, 0.6), Vector3(0, 1.5, 0), _material(Color(t.get("wall", Color("d8d8cc"))), 0.3))
+			_part(body, "box", Vector3(0.62, 0.14, 0.62), Vector3(0, 0.5, 0), _material(Color(t.get("band", Color("2a8a5a"))), 0.4))
+			_part(body, "box", Vector3(0.64, 0.05, 0.64), Vector3(0, 2.3, 0), _glow_material(Color(t.light), 1.5), false)
+		"pallet":
+			_part(body, "box", Vector3(0.9, 0.12, 0.9), Vector3(0, 0.06, 0), _material(Color("8a6a44"), 0.9))
+			for k in int(pr.get("height", 1)):
+				var crate = _part(body, "box", Vector3(0.8, 0.5, 0.8), Vector3(0.03*(k%2), 0.37+k*0.5, 0), _material(Color(["9a7a4a", "7a6a5a", "5a6a4a"][(seed+k)%3]), 0.9))
+				crate.rotation.y = 0.1*((seed+k)%3-1)
+		"tv_small":
+			_part(body, "box", Vector3(0.36, 0.3, 0.3), Vector3(0, 0.95, 0), _material(Color("2a2830"), 0.6))
+			_part(body, "box", Vector3(0.28, 0.22, 0.01), Vector3(0, 0.95, 0.155), _glow_material(SCREEN_COLORS[seed%SCREEN_COLORS.size()].lerp(Color.WHITE, 0.4), 1.2), false)
+		"swing":
+			var frame = _material(Color("c84a3a"), 0.5, 0.4)
+			for x in [-0.9, 0.9]:
+				for z in [-0.35, 0.35]: _part(body, "cyl", Vector3(0.04, 1.8, 0), Vector3(x, 0.85, z*0.6), frame).rotation.x = z*0.4
+			_part(body, "cyl", Vector3(0.04, 1.85, 0), Vector3(0, 1.72, 0), frame).rotation.z = PI/2
+			for x in [-0.45, 0.45]:
+				_part(body, "box", Vector3(0.01, 1.25, 0.01), Vector3(x, 1.1, 0), dark_material())
+				_part(body, "box", Vector3(0.3, 0.04, 0.16), Vector3(x, 0.45, 0), _material(Color("2a2a30")))
+		"slide":
+			_part(body, "box", Vector3(0.5, 1.2, 0.5), Vector3(0, 0.6, -0.6), _material(Color("3a6aaa"), 0.5, 0.3))
+			var chute = _part(body, "box", Vector3(0.45, 0.06, 1.5), Vector3(0, 0.62, 0.35), _material(Color("e0c030"), 0.3, 0.4))
+			chute.rotation.x = 0.62
+		"bandshell":
+			# A half dome stage with lights along its rim: the Hex Kids' turf.
+			_part(body, "box", Vector3(5.8, 0.45, 2.8), Vector3(0, 0.22, 0), _material(Color("6a6670"), 0.8))
+			var shell = _part(body, "sphere", Vector3(2.8, 0, 0), Vector3(0, 0.45, -0.2), _material(Color("d8d0c8"), 0.6))
+			shell.scale = Vector3(1.0, 0.85, 0.55)
+			for k in 7:
+				var a = PI*(k+0.5)/7.0
+				_part(body, "sphere", Vector3(0.09, 0, 0), Vector3(cos(a)*2.75, 0.45+sin(a)*2.3, 1.2), _glow_material(SCREEN_COLORS[k%SCREEN_COLORS.size()], 2.5), false)
+			_light(body, Color(0.9, 0.5, 1.0), 2.2, 6.0, Vector3(0, 1.6, 1.6))
+		"train":
+			# A stalled subway car, graffiti-free steel with a lit window strip.
+			var length: float = pr.get("length", 12)
+			body.rotation.y = PI/2
+			_part(body, "box", Vector3(2.5, 2.0, length-0.2), Vector3(0, 0.85, 0), _material(Color("a8acb4"), 0.3, 0.7))
+			_part(body, "box", Vector3(2.52, 0.12, length-0.2), Vector3(0, 0.5, 0), _material(Color("c03a3a"), 0.4))
+			for side in [-1, 1]:
+				_part(body, "box", Vector3(0.02, 0.5, length-1.0), Vector3(side*1.26, 1.25, 0), _glow_material(Color("fff2c8"), 0.7), false)
+				for k in int(length/4.0):
+					_part(body, "box", Vector3(0.03, 1.2, 0.7), Vector3(side*1.26, 0.85, -length/2.0+2.0+k*4.0), _material(Color("6a6e78"), 0.4, 0.6))
+			_light(body, Color("fff2c8"), 1.2, 5.0, Vector3(0, 2.0, 0))
+		"tree":
+			# A city park tree: a dark trunk and a lumpy round crown.
+			var size: float = pr.get("size", 1.0)
+			var trunk = _material(Color("4a3a2c"), 0.9)
+			_part(body, "cone", Vector3(0.13*size, 1.4*size, 0.09*size), Vector3(0, 0.7*size, 0), trunk)
+			var leaf = _material(Color(["2f5a34", "3a6a3a", "4a5a2a"][int(pr.get("color", 0))%3]), 0.8)
+			for k in 4:
+				var a = k*TAU/4+seed
+				_part(body, "sphere", Vector3((0.55+0.1*(k%2))*size, 0, 0), Vector3(cos(a)*0.3*size, (1.75+0.2*(k%2))*size, sin(a)*0.3*size), leaf)
 		_:
 			_part(body, "box", Vector3(0.5, 0.5, 0.5), Vector3(0, 0.25, 0), _material(Color("4a4652")))
+
+## A neon word floating over a stall.
+func _sign(parent: Node3D, text: String, at: Vector3, color: Color, size: int) -> void:
+	var label = Label3D.new()
+	label.text = text
+	label.font_size = size
+	label.pixel_size = 0.005
+	label.modulate = color*1.7
+	label.outline_size = 10
+	label.outline_modulate = Color(color, 0.6)
+	label.shaded = false
+	label.position = at
+	parent.add_child(label)
+
+## A townsperson standing still and breathing: shopkeepers and such.
+func npc(model: String, facing: Vector2) -> Node3D:
+	var actor = _actor("characters/%s.glb" % model, HERO_SCALE)
+	for attachment in actor.find_children("*", "BoneAttachment3D", true, false):
+		for item in attachment.get_children():
+			var name = String(item.name)
+			if name.begins_with("1H_") or name.begins_with("2H_") or "Shield" in name or "Spellbook" in name or "Knife" in name or name=="Throwable":
+				item.visible = false
+	var player: AnimationPlayer = actor.get_meta("anim")
+	player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_IDLE
+	if player.has_animation("Idle"): player.play("Idle")
+	face(actor.get_meta("model"), facing)
+	return actor
+
+## A doorway into a side area, set into a building front: a dark opening in a
+## lit frame with the place's name over it. Gates (the park) are an iron arch.
+func doorway(exit: Dictionary, t: Dictionary, gate: bool) -> Node3D:
+	var root = Node3D.new()
+	var text: String = exit.get("sign", "EXIT")
+	var color = Color("5dff8f") if gate else Color("ff4fd8")
+	if exit.has("zone") and exit.zone=="warehouse": color = Color("ffb438")
+	if gate:
+		var iron = _material(Color("1c1c22"), 0.5, 0.7)
+		for x in [-0.75, 0.75]:
+			_part(root, "box", Vector3(0.22, 2.3, 0.22), Vector3(x, 1.15, 0.05), _material(Color("6a5a50"), 0.9))
+			_part(root, "sphere", Vector3(0.14, 0, 0), Vector3(x, 2.4, 0.05), _glow_material(Color("ffe8a0"), 2.5), false)
+		var arch = _part(root, "cyl", Vector3(0.78, 0.06, 0), Vector3(0, 2.15, 0.05), iron)
+		arch.rotation.x = PI/2
+		for k in 6: _part(root, "box", Vector3(0.03, 1.8, 0.03), Vector3(-0.6+k*0.24, 0.9, 0.05) if k%5!=0 else Vector3(-0.6+k*0.24, 0.9, 0.25), iron)
+	else:
+		var frame = _material(Color("2a2834"), 0.4, 0.6)
+		_part(root, "box", Vector3(1.3, 1.75, 0.04), Vector3(0, 0.875, 0.02), _material(Color("050507"), 1.0), false)
+		for x in [-0.7, 0.7]: _part(root, "box", Vector3(0.12, 1.9, 0.14), Vector3(x, 0.95, 0.05), frame)
+		_part(root, "box", Vector3(1.55, 0.14, 0.16), Vector3(0, 1.9, 0.06), frame)
+		_part(root, "box", Vector3(1.5, 0.03, 0.03), Vector3(0, 1.78, 0.14), _glow_material(color, 2.0), false)
+		# A doormat of light spilling out.
+		_part(root, "box", Vector3(1.1, 0.01, 0.6), Vector3(0, 0.015, 0.4), _beam_material(Color(color, 0.12)), false)
+	var label = Label3D.new()
+	label.text = text
+	label.font_size = 80
+	label.pixel_size = 0.0055
+	label.modulate = color*1.8
+	label.outline_size = 12
+	label.outline_modulate = Color(color, 0.6)
+	label.shaded = false
+	label.position = Vector3(0, 2.6 if not gate else 2.95, 0.12)
+	root.add_child(label)
+	_light(root, color, 2.0, 5.0, Vector3(0, 2.0, 0.9))
+	return root
 
 func dark_material() -> StandardMaterial3D:
 	return _material(Color("161618"), 0.9)
@@ -599,7 +784,7 @@ func open_prop(node: Node3D, pr: Dictionary) -> void:
 
 ## The subway entrance down to the next floor: a stairwell with railings, a
 ## lit globe and a sign.
-func subway(t: Dictionary) -> Node3D:
+func subway(t: Dictionary, text: String = "SUBWAY") -> Node3D:
 	var root = Node3D.new()
 	var rail = _material(Color("2e6a4a"), 0.4, 0.6)
 	_part(root, "box", Vector3(1.5, 0.02, 1.9), Vector3(0, 0.012, 0), _material(Color("050507"), 1.0), false)
@@ -612,7 +797,7 @@ func subway(t: Dictionary) -> Node3D:
 		_part(root, "cyl", Vector3(0.05, 2.2, 0), Vector3(x, 1.1, 1.0), rail)
 		_part(root, "sphere", Vector3(0.16, 0, 0), Vector3(x, 2.3, 1.0), _glow_material(Color("5dff8f"), 2.5), false)
 	var sign = Label3D.new()
-	sign.text = "SUBWAY"
+	sign.text = text
 	sign.font_size = 72
 	sign.pixel_size = 0.005
 	sign.modulate = Color(0.75, 1.0, 0.85)*1.6
