@@ -856,3 +856,37 @@ static func _save_features(g, check: Callable) -> void:
 	check.call(not g._save() and g.save_status.begins_with("Save failed"), "Failed writes are reported instead of claiming success")
 	g.save_file = original_save
 	check.call(not g._load_save().is_empty(), "A failed save leaves the valid checkpoint intact")
+
+	g.state = "play"
+	g.player.hp = g.player.max_hp
+	var potions = g.player.potions
+	g._potion()
+	check.call(g.player.potions==potions and g.notice.contains("already full"), "Full-health potion warning consumes nothing")
+	g.player.hp = 1; g.player.potions = 0; g._potion()
+	check.call(g.notice.begins_with("No potions"), "Empty potion warning explains where to restock")
+	g._activate("settings")
+	var checkpoint = FileAccess.get_file_as_string(g.save_file)
+	g._activate("restart")
+	check.call(g.confirm_new_game and g.state=="paused", "New Adventure asks for confirmation")
+	g._activate("cancel_new_game")
+	check.call(not g.confirm_new_game and FileAccess.get_file_as_string(g.save_file)==checkpoint, "Cancelling a new adventure preserves the save")
+	g._activate("controls")
+	check.call(g.settings_page=="controls" and g.state=="paused", "Controls page keeps gameplay paused")
+	g._activate("settings_back")
+	var audio = g.synth
+	var previous_path = audio.preferences_path
+	var previous = [audio.enabled,audio.music_enabled,audio.effects_enabled]
+	audio.preferences_path = "res://previews/audio-test.cfg"
+	audio.enabled = true; audio.music_enabled = true; audio.effects_enabled = true
+	g._activate("music")
+	check.call(not audio.music_enabled and audio.effects_enabled, "Music toggle leaves effects on")
+	g._activate("effects")
+	check.call(AudioServer.is_bus_mute(AudioServer.get_bus_index("SFX")), "Effects toggle mutes active effects")
+	audio.music_enabled = true; audio.effects_enabled = true; audio.load_preferences()
+	check.call(not audio.music_enabled and not audio.effects_enabled, "Audio choices reload from disk")
+	g._activate("sound")
+	audio.enabled = true; audio.load_preferences()
+	check.call(not audio.enabled, "Master mute preference reloads from disk")
+	DirAccess.remove_absolute(audio.preferences_path)
+	audio.preferences_path = previous_path
+	audio.enabled = previous[0]; audio.music_enabled = previous[1]; audio.effects_enabled = previous[2]

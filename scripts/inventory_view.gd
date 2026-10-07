@@ -236,7 +236,7 @@ func _stat_row(key: String, origin: Vector2, panel_width: float, derived: String
 	_value_box(value_rect)
 	var total = roundi(s[key])
 	var bonus = total-roundi(s[key+"_base"])
-	ui.text(str(total), Vector2(value_rect.get_center().x, value_rect.position.y+5), 18, Data.AFFIX_BLUE if bonus>0 else Data.CHROME, ui.CENTER, ui.font_bold)
+	ui.text(str(total), Vector2(value_rect.get_center().x, value_rect.position.y+5), 18, Data.UPGRADE if g.pending_stats.get(key,0)>0 else Data.AFFIX_BLUE if bonus>0 else Data.CHROME, ui.CENTER, ui.font_bold)
 	# Arrow from the attribute to what it drives.
 	var arrow_x = origin.x+178
 	var arrow_y = value_rect.get_center().y

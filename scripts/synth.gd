@@ -22,6 +22,16 @@ var enabled = false:
 	set(value):
 		enabled = value
 		_refresh_music()
+		_refresh_effects()
+var music_enabled = true:
+	set(value):
+		music_enabled = value
+		_refresh_music()
+var effects_enabled = true:
+	set(value):
+		effects_enabled = value
+		_refresh_effects()
+var preferences_path = "user://audio-settings.cfg"
 var track = ""
 var _cache = {}
 var _voices: Array[AudioStreamPlayer] = []
@@ -126,7 +136,7 @@ static func make_tone(frequency: float,duration: float,shape: String,volume: flo
 	return stream
 
 func play(frequency: float = 220,duration: float = 0.12,shape: String = "triangle",volume: float = 0.045) -> void:
-	if not enabled or _voices.is_empty(): return
+	if not enabled or not effects_enabled or _voices.is_empty(): return
 	var key = str([frequency,duration,shape,volume])
 	if not _cache.has(key): _cache[key] = make_tone(frequency,duration,shape,volume)
 	var voice = _voices[_next%_voices.size()]
@@ -143,9 +153,27 @@ func set_track(track_name: String) -> void:
 
 func _refresh_music() -> void:
 	if not _music: return
-	if not enabled or not TRACKS.has(track):
+	if not enabled or not music_enabled or not TRACKS.has(track):
 		_music.stop()
 		return
 	var stream = load(TRACKS[track])
 	if _music.stream!=stream: _music.stream = stream
 	if not _music.playing: _music.play()
+
+func _refresh_effects() -> void:
+	var bus = AudioServer.get_bus_index("SFX")
+	if bus>=0: AudioServer.set_bus_mute(bus, not enabled or not effects_enabled)
+
+func load_preferences() -> void:
+	var config = ConfigFile.new()
+	if config.load(preferences_path)!=OK: return
+	enabled = bool(config.get_value("audio","enabled",true))
+	music_enabled = bool(config.get_value("audio","music",true))
+	effects_enabled = bool(config.get_value("audio","effects",true))
+
+func save_preferences() -> bool:
+	var config = ConfigFile.new()
+	config.set_value("audio","enabled",enabled)
+	config.set_value("audio","music",music_enabled)
+	config.set_value("audio","effects",effects_enabled)
+	return config.save(preferences_path)==OK

@@ -1,5 +1,11 @@
 # Dungeon Crawler — native Godot edition
 
+## Small playtest improvements
+
+Autosaves show a fading confirmation. Pending attribute values turn green, and confirmation, cancellation, settings, and audio buttons have hover explanations. Entrance prompts sit near the entrance when you are in range. Below 25% health the health orb gently pulses; potion warnings explain full health or missing potions without consuming one.
+
+Settings includes a controls page, separate music and effects toggles, and a master mute. Audio preferences persist in `audio-settings.cfg`, separately from character saves. New Adventure asks for confirmation before proceeding when an adventure or save already exists.
+
 ## Saving and stat allocation — October 7, 2026
 
 Open **Settings** using the top-right gear or Escape, then click **Save Game**. The game also saves on level-up, area travel, and confirming stat allocations. Saves keep your position, character, gear, quests, stash, and revealed minimap cells for every visited area. Leaving the street for the mall and coming back preserves exploration; it also survives quitting and continuing. Enemies and loose ground loot still regenerate when an area is rebuilt. The last checkpoint is retained after defeat or victory.

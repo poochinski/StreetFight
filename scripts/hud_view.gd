@@ -34,6 +34,7 @@ func draw() -> void:
 	ui.alpha = 1
 	if g.state=="title":
 		_title()
+		if g.confirm_new_game: _new_game_confirmation()
 		return
 	if g.state=="create":
 		_create()
@@ -52,12 +53,16 @@ func draw() -> void:
 	_utility_panel()
 	if g.state in ["paused", "victory", "defeat"]:
 		_modal()
+		if g.confirm_new_game: _new_game_confirmation()
+		_button_tooltip()
 		return
 	if g.state=="inventory": inventory_view.draw_overlay()
 	elif g.state=="play":
 		var drop = g.loot_view.hovered_drop
 		if drop!=null and drop.kind=="item": inventory_view.draw_tooltip(drop.item, g.pointer, "ground")
 		elif hovered_skill!="": _skill_tooltip(hovered_skill)
+
+	_button_tooltip()
 
 func _screen() -> Vector2:
 	return c.get_viewport_rect().size
@@ -480,6 +485,9 @@ func _wrap(value: String, size: int, max_width: float) -> Array:
 ## A glass orb of liquid with a moving surface, a chrome bezel and its value above.
 func _orb(center: Vector2, fraction: float, light: Color, dark: Color, badge: String, value: String) -> void:
 	var r = ORB_RADIUS
+	if badge=="HP" and fraction<0.25 and fraction>0:
+		ui.glow(center, r+22, Color(Data.HEALTH,0.12+0.10*(0.5+0.5*sin(g.clock*3))))
+		ui.ring(center,r+14,Color(Data.HEALTH,0.4+0.25*sin(g.clock*3)),2)
 	ui.circle(center, r+12, Color("06030c"))
 	ui.ring(center, r+9, Color("8a6a3c"), 5)
 	ui.ring(center, r+6, Color("f0d090"), 1.5)
@@ -524,6 +532,10 @@ func _loot_feed() -> void:
 
 func _messages() -> void:
 	var size = _screen()
+	if g.save_flash>0 and g.state=="play":
+		ui.alpha = minf(1,g.save_flash)
+		ui.text("Game saved", Vector2(size.x/2, 64), 12, Data.UPGRADE, ui.CENTER, ui.font_bold)
+		ui.alpha = 1
 	if g.state=="play" and g.notice_time>0:
 		ui.alpha = clampf(g.notice_time*2, 0, 1)
 		var width = ui.width(g.notice, 13, ui.font_bold)
@@ -540,6 +552,10 @@ func _messages() -> void:
 			var label = parts[1] if parts.size()>1 else interaction
 			var width = ui.width(label, 13, ui.font_bold)+44
 			var r = Rect2(size.x/2-width/2, size.y-168, width, 30)
+			var entrance = g._near_exit()
+			if not entrance.is_empty() and interaction=="E · "+entrance.label:
+				var at = g._to_screen(g._project(entrance.pos))
+				r.position = Vector2(clampf(at.x-width/2,8,size.x-width-8),clampf(at.y+32,130,size.y-168))
 			ui.rect(r, Color("0d0620e0"))
 			ui.rect(r, Data.NEON_CYAN, false, 1)
 			var key = Rect2(r.position+Vector2(8, 6), Vector2(18, 18))
@@ -706,6 +722,9 @@ func _modal() -> void:
 	ui.panel(rect, true)
 	var o = rect.position+Vector2(40, 44)
 	var paused = g.state=="paused"
+	if paused:
+		_settings(rect, o)
+		return
 	var won = g.state=="victory"
 	ui.text("T A K E   A   B R E A T H" if paused else "T H E   E M B E R S   B U R N   B R I G H T" if won else "T H E   D E P T H S   C L A I M   A N O T H E R", o, 10, Data.NEON_CYAN, ui.LEFT, ui.font_bold)
 	ui.chrome("Settings" if paused else "The Warden Has Fallen" if won else "Your Light Fades", o+Vector2(0, 22), 32)
@@ -723,3 +742,46 @@ func _modal() -> void:
 	for i in help.size():
 		ui.text(help[i], Vector2(size.x/2, o.y+272+i*18), 11, Data.INK_MUTED, ui.CENTER)
 	ui.button("quit", Rect2(o+Vector2(0, 356), Vector2(400, 30)), "QUIT TO DESKTOP", false, 11)
+
+func _settings(rect: Rect2, o: Vector2) -> void:
+	ui.chrome("Controls" if g.settings_page=="controls" else "Settings", o, 30)
+	if g.settings_page=="controls":
+		var lines = ["Left click / hold — Move or attack", "Shift + click — Attack in place", "WASD / arrows — Move", "Right click / 1 — First skill; 2–4 — Other skills", "J / hold — Basic attacks", "Space — Dodge     R — Healing potion", "E — Enter / interact     M — Minimap", "C — Character     I / B — Inventory", "Stats: + / − to adjust; Shift adjusts five", "Green check — Confirm     Red X — Cancel", "Escape — Close a panel / open Settings"]
+		for i in lines.size(): ui.text(lines[i],o+Vector2(0,54+i*25),13,Data.INK)
+		ui.button("settings_back",Rect2(o+Vector2(0,350),Vector2(400,34)),"BACK TO SETTINGS")
+		return
+	ui.button("resume",Rect2(o+Vector2(0,48),Vector2(400,38)),"RESUME GAME",true)
+	ui.button("save_game",Rect2(o+Vector2(0,96),Vector2(400,32)),"SAVE GAME")
+	ui.text(g.save_status,o+Vector2(200,134),12,Data.UPGRADE if g.save_status=="Game saved." else Data.DOWNGRADE,ui.CENTER)
+	ui.button("sound",Rect2(o+Vector2(0,158),Vector2(400,30)),"ALL SOUND: "+("ON" if g.synth.enabled else "MUTED"))
+	ui.button("music",Rect2(o+Vector2(0,196),Vector2(194,30)),"MUSIC: "+("ON" if g.synth.music_enabled else "OFF"))
+	ui.button("effects",Rect2(o+Vector2(206,196),Vector2(194,30)),"EFFECTS: "+("ON" if g.synth.effects_enabled else "OFF"))
+	ui.button("controls",Rect2(o+Vector2(0,236),Vector2(400,30)),"CONTROLS")
+	ui.button("restart",Rect2(o+Vector2(0,276),Vector2(400,30)),"NEW ADVENTURE")
+	ui.button("quit",Rect2(o+Vector2(0,350),Vector2(400,30)),"QUIT TO DESKTOP")
+
+func _new_game_confirmation() -> void:
+	g.buttons.clear()
+	ui.rect(Rect2(Vector2.ZERO,_screen()),Color("070210dd"))
+	var r = Rect2(_screen()/2-Vector2(240,115),Vector2(480,230))
+	ui.panel(r)
+	ui.chrome("Start a new adventure?",r.position+Vector2(24,24),24)
+	ui.text("Beginning a new character will replace your saved game.",r.position+Vector2(24,80),13,Data.INK)
+	ui.text("Keep your current adventure if you are not ready.",r.position+Vector2(24,108),13,Data.INK_MUTED)
+	ui.button("cancel_new_game",Rect2(r.position+Vector2(24,158),Vector2(210,38)),"KEEP CURRENT GAME",true,12)
+	ui.button("confirm_new_game",Rect2(r.position+Vector2(246,158),Vector2(210,38)),"NEW ADVENTURE",false,12)
+
+func _button_tooltip() -> void:
+	var tips = {"confirm_stats":"Confirm and save these stat points", "cancel_stats":"Discard all pending stat changes", "settings":"Settings: save, sound and controls", "sound":"Mute or unmute all sound", "music":"Toggle music; your preference is remembered", "effects":"Toggle sound effects; your preference is remembered"}
+	for i in range(g.buttons.size()-1,-1,-1):
+		var button = g.buttons[i]
+		if not button.rect.has_point(g.pointer): continue
+		if not tips.has(button.id): return
+		var text: String = tips[button.id]
+		var width = ui.width(text,12)+24
+		var r = Rect2(g.pointer+Vector2(12,22),Vector2(width,30))
+		r.position.x = clampf(r.position.x,8,_screen().x-width-8)
+		r.position.y = clampf(r.position.y,8,_screen().y-38)
+		ui.rect(r,Color("100820f5")); ui.rect(r,Data.NEON_CYAN,false,1)
+		ui.text(text,r.position+Vector2(12,7),12,Data.INK)
+		return

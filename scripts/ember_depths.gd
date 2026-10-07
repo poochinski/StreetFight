@@ -91,6 +91,9 @@ var seen = {}
 var explored = {}
 var pending_stats = {}
 var save_status = ""
+var save_flash = 0.0
+var settings_page = "main"
+var confirm_new_game = false
 var rooms: Array = []
 var enemies: Array = []
 var props: Array = []
@@ -191,6 +194,7 @@ func _ready() -> void:
 	testing = "--smoke-test" in args or "--render-check" in args
 	if testing: save_file = "user://faithful-port-test.json"
 	synth.enabled = not testing
+	if not testing: synth.load_preferences()
 	if not "--smoke-test" in args and not "--2d" in args:
 		view3d = View3D.new()
 		add_child(view3d)
@@ -307,7 +311,9 @@ func _save() -> bool:
 		{"area":area,"run_seed":run_seed,"visited":visited.keys(),"stash":stash,"quests":player.get("quests",{}),
 		"explored":explored,"position":[player.pos.x,player.pos.y]})
 	save_status = "Game saved." if ok else "Save failed. Please try again."
-	if ok: cached_save = _load_save()
+	if ok:
+		cached_save = _load_save()
+		save_flash = 2.5
 	else: _notice(save_status)
 	return ok
 
@@ -645,7 +651,7 @@ func _potion() -> void:
 		_notice("Your health is already full.")
 		return
 	if player.potions<=0:
-		_notice("No potions left. Search footlockers or buy some at the subway.")
+		_notice("No potions left. Visit the Juice Bar or search footlockers.")
 		return
 	player.potions -= 1
 	player.hp = minf(player.max_hp,player.hp+roundi(player.max_hp*0.65))
@@ -890,7 +896,9 @@ func _tone(frequency: float = 220,duration: float = 0.12,shape: String = "triang
 # --- Game states and input --------------------------------------------------
 
 func _pause() -> void:
-	if state=="play": state = "paused"
+	if state=="play":
+		state = "paused"
+		settings_page = "main"
 	elif state=="paused": state = "play"
 	keys.clear(); attack_held = false
 	attack_buffer = 0; screen_velocity = Vector2.ZERO
@@ -969,6 +977,12 @@ func _input(event: InputEvent) -> void:
 			return
 		if event.echo: return
 		if key==KEY_ESCAPE:
+			if confirm_new_game:
+				confirm_new_game = false
+				return
+			if state=="paused" and settings_page=="controls":
+				settings_page = "main"
+				return
 			if state=="inventory": _close_panels()
 			else: _pause()
 			return
@@ -1043,8 +1057,19 @@ func _activate(id: String,right: bool = false,shift: bool = false) -> void:
 	if right: return
 	match id:
 		"start", "restart":
-			state = "create"
-			_tone(420,0.08,"triangle",0.02)
+			if state!="title" or not _load_save().is_empty(): confirm_new_game = true
+			else: state = "create"
+		"confirm_new_game":
+			if confirm_new_game:
+				confirm_new_game = false
+				state = "create"
+		"cancel_new_game": confirm_new_game = false
+		"controls": settings_page = "controls"
+		"settings_back": settings_page = "main"
+		"music", "effects":
+			if id=="music": synth.music_enabled = not synth.music_enabled
+			else: synth.effects_enabled = not synth.effects_enabled
+			if not synth.save_preferences(): _notice("Could not save sound settings.")
 		"begin": _begin(false,chosen_class)
 		"back": state = "title"
 		"continue": _begin(true)
@@ -1070,6 +1095,7 @@ func _activate(id: String,right: bool = false,shift: bool = false) -> void:
 		"potion": _potion()
 		"sound":
 			synth.enabled = not synth.enabled
+			if not synth.save_preferences(): _notice("Could not save sound settings.")
 			_tone(440,0.15)
 		"quit": get_tree().quit()
 
@@ -1082,6 +1108,7 @@ func _notification(what: int) -> void:
 
 func _process(delta: float) -> void:
 	clock += delta
+	save_flash = maxf(0,save_flash-delta)
 	_apply_zoom()
 	_advance_game(delta)
 	if view3d: view3d.sync(delta)

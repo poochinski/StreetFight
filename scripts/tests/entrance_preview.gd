@@ -23,6 +23,13 @@ func run() -> void:
 	await capture("pending-stats")
 	g._activate("settings"); g._activate("save_game")
 	await capture("settings-save")
+	g._activate("controls"); await capture("controls")
+	g._activate("settings_back"); g._activate("restart"); await capture("new-adventure-confirmation")
+	g._activate("cancel_new_game"); g._activate("resume")
+	g.player.hp = g.player.max_hp*0.2
+	g.save_flash = 2.5
+	g.notice_time = 0; g.level_banner = 0
+	await capture("low-health-save")
 	quit()
 func shot(at: Vector2, name: String) -> void:
 	g.notice_time=0; g.loot_feed.clear()
