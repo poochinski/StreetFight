@@ -11,6 +11,7 @@ extends RefCounted
 
 const Data = preload("res://scripts/data.gd")
 const Elites = preload("res://scripts/elites.gd")
+const Zones = preload("res://scripts/zones.gd")
 const SIZE = 64
 const ROOM = 1       # building interior floor
 const CORRIDOR = 2   # street asphalt
@@ -154,7 +155,7 @@ static func generate(g, number: int) -> void:
 	g.stairs = exit_zone.pos
 	g.player.pos = start_zone.pos
 	for c in _cells_around(Vector2i(g.stairs),2): reserved[c] = true
-	for c in _cells_around(Vector2i(start_zone.pos),1): reserved[c] = true
+	for c in _cells_around(Vector2i(start_zone.pos),2 if number>1 else 1): reserved[c] = true
 	for z in g.rooms: reserved[Vector2i(z.pos)] = true
 	for z in g.rooms: _dress(g,z,number,reserved)
 	for z in g.rooms: _settle(g,z)
@@ -162,9 +163,66 @@ static func generate(g, number: int) -> void:
 	for z in g.rooms:
 		if z.type=="arena":
 			g.decals = g.decals.filter(func(d): return not (d.kind in ["manhole","pothole"] and z.rect.has_point(Vector2i(d.pos))))
+	_add_doors(g,number)
 	_add_signs(g,number)
+	# No neon sign crowds a doorway's marquee.
+	for door in g.exits:
+		if door.kind=="door": g.signs = g.signs.filter(func(s): return s.cells.all(func(c): return Vector2(c).distance_to(Vector2(door.wall))>2.5))
 	_spawn_enemies(g,number)
 	build_navigation(g)
+	# The subway entrance leads down to the station toward the next street;
+	# past the first street, stairs at the start lead back down to the last one.
+	g.arrivals["start"] = start_zone.pos
+	if number<Zones.STREETS:
+		g.exits.append({"kind":"subway","pos":g.stairs,"to":["subway",number,"west"],"label":"Take the subway to %s" % Zones.street_name(number+1),"face":Vector2.DOWN})
+		g.arrivals["subway"] = _beside(g,g.stairs,2.0)
+	if number>1:
+		g.exits.append({"kind":"subway","pos":start_zone.pos,"to":["subway",number-1,"east"],"label":"Subway back to %s" % Zones.street_name(number-1),"face":Vector2.DOWN})
+		g.arrivals["start"] = _beside(g,start_zone.pos,2.0)
+	g.player.pos = g.arrivals["start"]
+
+## Open ground about distance cells from point, for arriving beside an exit.
+static func _beside(g, point: Vector2, distance: float) -> Vector2:
+	for k in 16:
+		var at = point+Vector2.from_angle(PI/2+k*TAU/16)*distance
+		if g._free(at,0.35): return at
+	return point
+
+## Doorways into the side areas: a doorway in a full-height building front,
+## with a sidewalk in front of it, away from the start, the subway and other doors.
+static func _add_doors(g, number: int) -> void:
+	var kinds: Array = Zones.DOORS.get(number,[])
+	if kinds.is_empty(): return
+	var candidates: Array = []
+	for c in g.cells:
+		if g.cells[c]!=SIDEWALK or g.blocked.has(c): continue
+		for out in [Vector2i.UP,Vector2i.LEFT]:
+			var wall = c+out
+			var along = Vector2i(out.y,out.x)
+			if g.cells.has(wall) or g.cells.has(wall+out) or solid_height(g,wall)<FACADE_HEIGHT: continue
+			if g.cells.has(wall+along) or g.cells.has(wall-along): continue
+			if g.cells.get(c+along,0)!=SIDEWALK or g.cells.get(c-along,0)!=SIDEWALK: continue
+			if g.blocked.has(c+along) or g.blocked.has(c-along) or g.blocked.has(c-out): continue
+			candidates.append([c,out])
+	_shuffle(g,candidates)
+	var start: Vector2 = g.rooms[0].pos
+	for kind in kinds:
+		for relax in [1.0,0.6,0.0]:
+			var found = false
+			for pair in candidates:
+				var pos = Vector2(pair[0])+Vector2(0.5,0.5)
+				if pos.distance_to(start)<12*relax or pos.distance_to(g.stairs)<8*relax: continue
+				var crowded = false
+				for other in g.exits:
+					if other.pos.distance_to(pos)<14*relax: crowded = true
+				if crowded: continue
+				var out: Vector2i = pair[1]
+				g.exits.append({"kind":"door","pos":pos,"wall":pair[0]+out,"face":Vector2(-out),"to":[kind,number,"door"],
+					"label":"Enter %s" % Zones.PLACES[kind].name,"sign":Zones.PLACES[kind].sign,"zone":kind})
+				g.arrivals["door:"+kind] = pos+Vector2(-out)*0.6
+				found = true
+				break
+			if found: break
 
 static func _zone(r: Rect2i,type: String,grid: Vector2i = Vector2i(-1,-1)) -> Dictionary:
 	return {"pos":Vector2(r.position)+Vector2(r.size)/2.0,"w":r.size.x,"h":r.size.y,"rect":r,"role":"plain","type":type,"grid":grid}
@@ -777,12 +835,12 @@ static func _signs_in_run(g, run: Array, face: Vector2i, along: Vector2i, words:
 		else:
 			at += 2+floori(g._random()*3)
 
-static func _spawn_enemies(g, number: int) -> void:
+static func _spawn_enemies(g, number: int, street: bool = true) -> void:
 	var start: Vector2 = g.rooms[0].pos
 	var candidates: Array = []
 	for i in range(1,g.rooms.size()):
 		var z = g.rooms[i]
-		if z.role=="arena": continue
+		if z.role=="arena" or z.role=="safe": continue
 		if z.pos.distance_to(start)<12: continue
 		candidates.append(z)
 	_shuffle(g,candidates)
@@ -801,12 +859,12 @@ static func _spawn_enemies(g, number: int) -> void:
 		var pack: Array = []
 		for j in count:
 			var kind = "ranged" if g._random()<0.3 else "brute" if g._random()<0.4 else "imp"
-			var enemy = g._spawn_enemy(kind,_spot(g,z,1.0,start,10.0))
+			var enemy = g._spawn_enemy(kind,_spot(g,z,1.0,start,11.5))
 			enemy.attack = g._between(0.2,1.5)
 			enemy.phase = g._random()*6
 			pack.append(enemy)
 		if rank!="": Elites.promote_pack(g,pack,rank,number)
-	if number==3:
+	if number==3 and street:
 		var arena = g.rooms[g.rooms.size()-1]
 		g.enemies = g.enemies.filter(func(e): return e.pos.distance_to(g.stairs)>9)
 		for j in 3:

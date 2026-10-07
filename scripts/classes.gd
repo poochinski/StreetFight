@@ -84,7 +84,7 @@ static func spell_power(g) -> float:
 # --- Casting ------------------------------------------------------------------------
 
 static func cast(g, index: int) -> void:
-	if g.state!="play" or index<0 or index>=4: return
+	if g.state!="play" or index<0 or index>=4 or g._no_fighting(): return
 	var id: String = skill_ids(g)[index]
 	if not unlocked(g, index):
 		g._notice("%s is learned at level %d." % [SKILLS[id].name, UNLOCK_LEVELS[index]])

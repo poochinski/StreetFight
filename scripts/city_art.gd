@@ -24,7 +24,7 @@ func _init(game, painter) -> void:
 	neon_font.font_weight = 700
 
 func theme() -> Dictionary:
-	return Data.FLOOR_THEMES[clampi(g.floor_number-1,0,Data.FLOOR_THEMES.size()-1)]
+	return g.theme()
 
 # --- Small helpers -------------------------------------------------------------
 
@@ -1174,9 +1174,16 @@ func _ruin_wall(pr: Dictionary, t: Dictionary) -> void:
 
 # --- The subway entrance --------------------------------------------------------------
 
-func exit() -> void:
+func exit(exit_info: Dictionary) -> void:
 	var t = theme()
-	var center: Vector2 = g.stairs
+	var center: Vector2 = exit_info.pos
+	if exit_info.kind=="door" or exit_info.kind=="gate":
+		# Doorways: a lit threshold and the place's name.
+		var color = Color("5dff8f") if exit_info.kind=="gate" or exit_info.get("zone","")=="park" else Color("ff4fd8")
+		p.glow(g._project(center),60,Color(color,0.25))
+		var label: String = exit_info.get("sign","EXIT")
+		_neon_text(label,g._project(center,70)-Vector2(_text_width(label,12)/2.0,0),12,color,1.0)
+		return
 	var hx = 0.75; var hy = 1.0
 	var hole = [_pt(center.x-hx,center.y-hy),_pt(center.x+hx,center.y-hy),_pt(center.x+hx,center.y+hy),_pt(center.x-hx,center.y+hy)]
 	p.glow(g._project(center),110,Color(t.neon[1],0.12+sin(g.clock*2)*0.03))

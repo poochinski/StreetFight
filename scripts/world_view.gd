@@ -40,7 +40,7 @@ func _init(game, painter) -> void:
 	darkness.fill_to = Vector2(1.0,0.5)
 
 func _theme() -> Dictionary:
-	return Data.FLOOR_THEMES[clampi(g.floor_number-1,0,Data.FLOOR_THEMES.size()-1)]
+	return g.theme()
 
 ## Builds the cached layers behind the game's own drawing: the backdrop, the
 ## ground of every chunk, the street markings and lights, then the buildings
@@ -99,7 +99,8 @@ func draw_layer(node: CanvasItem, chunk: Vector2i, kind: String) -> void:
 		city.decals(g.player.pos,_cull_radius())
 		city.lights(g.player.pos,_cull_radius())
 		city.sign_light()
-		if g.seen.has(Vector2i(g.stairs)) and g.floor_number<3: city.exit()
+		for exit in g.exits:
+			if g.seen.has(Vector2i(exit.pos)): city.exit(exit)
 	else:
 		var x0 = chunk.x*CHUNK; var y0 = chunk.y*CHUNK
 		for total in 2*CHUNK-1:

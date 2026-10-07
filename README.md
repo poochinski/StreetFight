@@ -142,9 +142,25 @@ Every floor is a newly generated district of a city that burned in 1989.
 
 Three randomly generated city floors, melee and ranged enemies, a boss with a telegraphed area attack, chests, breakable crates, gold, potions, five tiers of loot, gems, stat points, leveling, map discovery, pause, victory/defeat, and local floor checkpoints.
 
-Taking the subway heals 35% of maximum health and buys potions up to three for 15 gold each. Shift-click spare items in the bag to salvage them for gold. Defeat the Ash Warden on floor three to win. Move outside its red attack ring or dodge when the slam lands.
+Heading down into the subway toward the next street heals 35% of maximum health and buys potions up to three for 15 gold each. Shift-click spare items in the bag to salvage them for gold. Defeat the Ash Warden in Sunset Plaza to win. Move outside its red attack ring or dodge when the slam lands.
 
-The game saves at the beginning of each floor to Godot's local user-data folder (`%APPDATA%/Godot/app_userdata/Dungeon Crawler/descent.json`). Continue restores that floor's entry stats, stat points, equipment and bag with a newly generated floor. Checkpoints from versions before the loot update cannot be continued; start a new adventure. Defeat and victory remove the checkpoint.
+The game saves each time you enter a place, to Godot's local user-data folder (`%APPDATA%/Godot/app_userdata/Dungeon Crawler/descent.json`). Continue puts you back where you entered, with your stats, stat points, equipment, bag, stash, side quests and the places you have found. Checkpoints from before the city zones load on their floor's street. Defeat and victory remove the checkpoint.
+
+## Places in the city
+
+The streets are the spine of the city: Neon Row, The Burnt Mile and Sunset Plaza. Side areas open off them through ordinary doorways, and the subway runs between them. Press **E** at a doorway, gate or stairway to go through. You can go back to any place you have been; it is built the same way every visit (from the run's seed), but its enemies come back.
+
+- **Subway stations:** the subway entrance on each street leads down to a station: platforms either side of the tracks, tiled pillars, a stalled train, a token booth and a maintenance room. The stairs at the far end come up at the start of the next street; the stairs at the start of a street go back down.
+- **Starlight Mall** (Neon Row, through the STARLIGHT MALL doors): a long concourse with planters and benches, and burned-out shops off it: arcades, video stores, laundromats, a diner and clothes boutiques with racks and mannequins. The mall rats hold the shops.
+- **The food court** (inside the mall) is the town hub and a safe zone: no enemies come in, nobody can attack or be hurt there, and enemies chase you again as soon as you step out.
+  - **Ray's Pawn** sells twelve pieces of gear, restocked every visit. Click to buy. Right-click a bag item, or drop it on the shop, to sell it.
+  - **Juice Bar** sells health potions.
+  - **Stash:** forty slots that stay with you for the whole run. Right-click moves items between the bag and the stash.
+  - **Transit map:** fast travel to any street, station or side area you have already visited, and back to the food court. There is a transit map on each station platform too.
+- **Liberty Park** (Neon Row, through the iron gate): a grimy 80s city park inside a ring of buildings. A paved promenade, a dirt loop path, the fountain plaza, a pond, a homeless camp, a playground and the bandshell, with trees everywhere.
+- **Warehouse 13** (The Burnt Mile): the dungeon. Storage halls of columns, crates and drums, offices with desks and TVs, loading bays stacked with pallets and a cold room, joined by corridors.
+- **Side quests:** each side area has a gang boss to put down: Static Sally at the park's bandshell (Turf War), Joystick Joe in the mall (Mall Rats) and The Foreman in the warehouse (Graveyard Shift). You take the quest when you walk in, and it is done when the boss falls, for an Epic or Legendary item and a bag of gold. A finished boss stays gone.
+- The quest tracker shows the main quest, the side quest of the place you are in, and how many others are still open. The minimap marks doorways in pink, stairs in cyan and vendors in green.
 
 ## Project structure
 
@@ -170,6 +186,8 @@ The game saves at the beginning of each floor to Godot's local user-data folder 
 - `scripts/item_art.gd`: item icons.
 - `scripts/ui_kit.gd`: the interface look: panels, chrome lettering, neon buttons, slots, bars, suns and grids.
 - `scripts/painter.gd`: shared drawing primitives, fonts and gradients.
+- `scripts/zones.gd`: the places in the city, how they connect, fast-travel destinations and side quests.
+- `scripts/zone_generator.gd`: the mall and food court, the park, the warehouse and the subway stations.
 - `scripts/synth.gd`: synthesized sound effects, the audio buses and music playback.
 - `assets/audio/`: the synthwave music loops.
 - `tools/synthwave.py`: renders the music loops.
@@ -183,7 +201,7 @@ This is still a prototype. Equipped gear does not yet change the 3D hero's look.
 
 ## Validation
 
-The project was tested with Godot 4.7.2. Native checks cover 60 generated city floors (every street at least six cells wide, every cell reachable, props never walling anything off, an open subway entrance, no enemies at the start, neon signs on the buildings), equal speed in eight directions, motion at 15/30/60/144 FPS, stopping and reversing, swept wall collision, wall sliding, body-target aiming, swing timing, queued combos, finisher damage, held attacks, single hits per swing, dodge cancellation, obstruction checks, enemy line of sight, pathfinding, wind-ups and spacing, walled Ember Nova and its mana cost, every class's basic attack and four skills (locked until their level, then hitting and going on cooldown), click-to-move around walls and click-to-chase, the leveling pace, progression and stat points, item generation, equipping, swapping, sockets, salvage, sorting, dropping and picking up loot, elemental effects, saves, menus, synthesized sound waveforms, and that both music tracks load and loop:
+The project was tested with Godot 4.7.2. Native checks cover 60 generated city floors (every street at least six cells wide, every cell reachable, props never walling anything off, an open subway entrance, no enemies at the start, neon signs on the buildings), equal speed in eight directions, motion at 15/30/60/144 FPS, stopping and reversing, swept wall collision, wall sliding, body-target aiming, swing timing, queued combos, finisher damage, held attacks, single hits per swing, dodge cancellation, obstruction checks, enemy line of sight, pathfinding, wind-ups and spacing, walled Ember Nova and its mana cost, every class's basic attack and four skills (locked until their level, then hitting and going on cooldown), click-to-move around walls and click-to-chase, the leveling pace, progression and stat points, item generation, equipping, swapping, sockets, salvage, sorting, dropping and picking up loot, elemental effects, saves, menus, synthesized sound waveforms, that both music tracks load and loop, and the city zones (every side area and station fully reachable with reachable exits and enemies, quest bosses, street doorways, the same place on every visit, arriving back outside the doorway you left by, the food court's safety, the Pawn Shop, Juice Bar, stash and transit map, side quests, and saving and continuing in a side area, including older checkpoints):
 
 `godot --headless --path . -- --smoke-test`
 
