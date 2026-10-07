@@ -6,6 +6,7 @@ const Data = preload("res://scripts/data.gd")
 const Items = preload("res://scripts/items.gd")
 const Inventory = preload("res://scripts/inventory.gd")
 const Classes = preload("res://scripts/classes.gd")
+const Elites = preload("res://scripts/elites.gd")
 
 static func _capture(g, filename: String) -> void:
 	g.queue_redraw()
@@ -95,6 +96,18 @@ static func run(g) -> void:
 				push_error("3D projection round trip failed: %s -> %s" % [point,back])
 				g.get_tree().quit(1)
 				return
+	# An elite pack: a rare leader with minions, and a champion.
+	var pack: Array = []
+	for k in 3: pack.append(g._spawn_enemy("brute" if k==0 else "imp",g.player.pos+Vector2(2.2+k*0.7,-1.6+k*0.8)))
+	Elites.promote_pack(g,pack,"rare",2)
+	var champion = g._spawn_enemy("ranged",g.player.pos+Vector2(-1.5,2.2))
+	Elites._make_elite(g,champion,"champion",["turbo","molten"])
+	pack.append(champion)
+	for e in pack:
+		e.alert = true; e.attack = 100.0; e.hp *= 0.7
+	for frame in 8: await g.get_tree().process_frame
+	await _capture(g,"elites.png")
+	for e in pack: g.enemies.erase(e)
 	# The subway entrance that leads down to the next floor.
 	var start_pos = g.player.pos
 	g.player.pos = g.stairs+Vector2(1.2,2.4)

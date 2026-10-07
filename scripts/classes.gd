@@ -7,6 +7,7 @@ extends RefCounted
 const Data = preload("res://scripts/data.gd")
 const Effects = preload("res://scripts/effects.gd")
 const EnemyAI = preload("res://scripts/enemy_ai.gd")
+const Elites = preload("res://scripts/elites.gd")
 
 const UNLOCK_LEVELS = [1, 2, 4, 6]
 const ORDER = ["samurai", "gunslinger", "synth_mage"]
@@ -123,7 +124,7 @@ static func cast(g, index: int) -> void:
 			for e in _enemies_near(g, g.player.pos, 3.2):
 				g._strike_enemy(e, power)
 				e.stagger = 1.2 if e.kind!="boss" else 0.3
-				g._move(e, (e.pos-g.player.pos).normalized()*0.6, Data.ENEMIES[e.kind].radius)
+				Elites.knock(e, g.player.pos, 9.0)
 			g._tone(70, 0.4, "saw", 0.06)
 			g.hitstop = 0.09
 		"scatter":
@@ -216,6 +217,7 @@ static func _update_channel(g, dt: float) -> void:
 					ch.hit.append(e)
 					g._strike_enemy(e, SKILLS.dash.power)
 					e.stagger = 0.3
+					Elites.knock(e, e.pos-ch.dir, 5.0)
 					Effects.hit(g, e.pos, ch.dir, Color("ffcf7a"), true)
 					g.hitstop = 0.05
 			if g.player.pos.distance_to(before)<0.001: ch.time = 0
@@ -289,6 +291,7 @@ static func _update_zones(g, dt: float) -> void:
 					for e in _enemies_near(g, z.pos, z.radius):
 						g._strike_enemy(e, z.power*spell_power(g))
 						e.stagger = maxf(e.stagger, 0.5)
+						Elites.knock(e, z.pos, 7.0)
 					g.hitstop = 0.07
 			"frost":
 				z.tick -= dt

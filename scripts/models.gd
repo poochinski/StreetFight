@@ -215,7 +215,9 @@ func pose_enemy(actor: Node3D, e: Dictionary, g, dt: float) -> void:
 	if e.windup>0 and e.aim!=Vector2.ZERO: dir = e.aim-e.pos if e.kind=="ranged" else dir
 	if dir!=Vector2.ZERO: model.rotation.y = lerp_angle(model.rotation.y, atan2(dir.x, dir.y), 1.0-exp(-14*dt))
 	var flash: StandardMaterial3D = actor.get_meta("flash")
-	flash.albedo_color = Color(1, 0.9, 0.8, clampf(e.hit/0.15, 0.0, 1.0)*0.55)
+	var hit_glow = clampf(e.hit/0.15, 0.0, 1.0)*0.55
+	var tint: Color = actor.get_meta("tint", Color(1, 1, 1, 0))
+	flash.albedo_color = Color(1, 0.9, 0.8, hit_glow) if hit_glow>tint.a else tint
 	# Wind-up: start the attack so the blow lands when the wind-up ends.
 	if e.windup>0 and actor.get_meta("windup")<=0:
 		var total = maxf(0.1, e.windup_total)
@@ -228,6 +230,34 @@ func pose_enemy(actor: Node3D, e: Dictionary, g, dt: float) -> void:
 	if e.get("moving", 0.0)>0.2: _play(actor, info.run, 0.15, 1.0 if e.kind!="imp" else 1.15)
 	elif e.alert: _play(actor, "Idle_Combat", 0.2)
 	else: _play(actor, "Idle", 0.2)
+
+## Champions glow blue and rare leaders gold: a bigger body, a coloured
+## sheen, a ring of light at their feet and a light that follows them.
+func mark_elite(actor: Node3D, e: Dictionary, color: Color) -> void:
+	var model: Node3D = actor.get_meta("model")
+	model.scale *= e.get("size_mult", 1.0)
+	actor.set_meta("tint", Color(color, 0.16 if e.has("elite") else 0.08))
+	var ring = MeshInstance3D.new()
+	var disc = CylinderMesh.new()
+	var radius = 0.42*e.get("size_mult", 1.0)
+	disc.top_radius = radius; disc.bottom_radius = radius; disc.height = 0.01; disc.radial_segments = 24
+	ring.mesh = disc
+	var m = StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.albedo_color = Color(color, 0.35 if e.has("elite") else 0.18)
+	ring.material_override = m
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ring.position = Vector3(0, 0.03, 0)
+	actor.add_child(ring)
+	if e.has("elite"):
+		var light = OmniLight3D.new()
+		light.light_color = color
+		light.light_energy = 1.3
+		light.omni_range = 2.4
+		light.position = Vector3(0, 1.0, 0)
+		actor.add_child(light)
 
 ## Plays the death fall, then sinks the body into the ground and removes it.
 func die(actor: Node3D) -> void:

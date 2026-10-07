@@ -8,6 +8,7 @@ extends Node3D
 const Data = preload("res://scripts/data.gd")
 const DungeonGenerator = preload("res://scripts/dungeon_generator.gd")
 const Models = preload("res://scripts/models.gd")
+const Elites = preload("res://scripts/elites.gd")
 
 ## Screen pixels of height in the 2D art per 3D unit (a cell is one unit across).
 const PX = 45.0
@@ -496,6 +497,7 @@ func sync(dt: float) -> void:
 		if node==null:
 			node = models.enemy(e.kind)
 			actors.add_child(node)
+			if e.has("elite") or e.get("minion", false): models.mark_elite(node, e, Elites.color(e))
 			enemy_nodes[id] = node
 		models.pose_enemy(node, e, g, dt)
 		node.get_meta("anim").advance(g.simulation_delta)

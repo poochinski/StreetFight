@@ -76,6 +76,16 @@ The screen follows a classic action RPG layout:
 - **Equipment page (I):** the hero on a sunset stage between nine equipment slots (helmet, chest, gloves, belt, amulet, two rings, boots, weapon), a 40-slot bag, gold and potions, and a Sort button.
 - **Tooltips:** item name in its rarity color, type and item level, damage per second, damage and attack speed or armor, affixes, sockets and gems, flavor text, level requirement and sell price, and an "If equipped" list of exactly how your stats would change. The equipped item it would replace is shown beside it.
 
+## Elite packs, health bars and knockback
+
+- **Champion packs** (blue): every member is tougher and shares one or two traits.
+- **Rare packs** (gold): a named leader such as "Voltjaw the Hungry" with two or three traits, plus tougher minions. Rare leaders always drop a Rare or better item.
+- **Traits:** Turbo (much faster), Molten (sets you on fire, and explodes when it dies: step out of the red ring), Vampiric (heals when it hits you), Chrome Plated (takes 40% less damage), Overcharged (hitting it can arc lightning back at you), Juggernaut (extra health, no knockback or stagger).
+- Elites glow in their colour with a ring of light at their feet. Their name and traits float above them and show on the target bar at the top of the screen.
+- **Health bars** float over every enemy that is hurt or fighting.
+- **Knockback:** the combo finisher, Ember Nova, Ground Slam, Dash Strike, grenades and meteors shove enemies back and break light enemies' wind-ups. Brutes resist, elites resist more, and the boss and Juggernauts don't budge.
+- Elite traits and knockback live in `scripts/elites.gd`.
+
 ## Loot and items
 
 - **Five tiers:** Common (white), Uncommon (green), Rare (blue), Epic (purple) and Legendary (gold). The color marks the item everywhere: name plate, slot frame, tooltip and the beam of light over it on the ground.
