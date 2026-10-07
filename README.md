@@ -55,6 +55,14 @@ Movement now accelerates quickly, stops promptly, slides along walls, and travel
 
 Enemies notice the hero only with a clear line of sight, alert nearby allies, and walk around walls to reach the hero. Every enemy telegraphs its attack: imps and brutes flush red and mark their reach on the floor, casters charge their staff, and the Ash Warden shows its slam ring. Step out of reach or dodge before the wind-up ends. Hitting an imp or caster interrupts its wind-up; brutes and the Warden power through. Ember Nova and gold pickups no longer pass through walls, enemies no longer stand inside the hero, and melee reaches the edge of large enemies' bodies.
 
+## Sound and music
+
+Everything you hear is synthesized, in an 80s analog synth style. Sound is on when the game starts; the speaker button turns effects and music off and on together.
+
+- **Effects** are built in code from two slightly detuned oscillators, a sub-bass, a noise click on hits and a filter that closes as the note fades. Swings and impacts are punchy bass hits, menus and footsteps are soft square plucks, and loot, level ups and magic are bright FM bells. A short reverb puts them in the street.
+- **Music:** a 100 BPM synthwave loop on the city floors (A minor, gated snare, saw bass, arpeggio and lead) and a faster, darker 124 BPM boss track on the final floor.
+- The tracks are rendered by `tools/synthwave.py` (Python with numpy) into `assets/audio/`. Change a chord, melody or tempo there and run `python tools/synthwave.py` to make new ones.
+
 ## Classes
 
 A new game starts on the class screen. Each class has its own starting attributes, basic attack and four skills, learned at levels 1, 2, 4 and 6. Leveling is slower than before: about level 3 by the end of the first floor and level 6 near the Warden.
@@ -162,18 +170,20 @@ The game saves at the beginning of each floor to Godot's local user-data folder 
 - `scripts/item_art.gd`: item icons.
 - `scripts/ui_kit.gd`: the interface look: panels, chrome lettering, neon buttons, slots, bars, suns and grids.
 - `scripts/painter.gd`: shared drawing primitives, fonts and gradients.
-- `scripts/synth.gd`: synthesized sound effects.
+- `scripts/synth.gd`: synthesized sound effects, the audio buses and music playback.
+- `assets/audio/`: the synthwave music loops.
+- `tools/synthwave.py`: renders the music loops.
 - `scripts/save_game.gd`: floor checkpoints.
 - `scripts/tests/`: the smoke test and preview renderer.
 - `archive/3d-prototype/`: the earlier 3D experiment, kept for reference. Godot ignores this folder.
 - `icon.svg`: original project icon.
 - `previews/`: rendered previews of the actual native game, including title, gameplay, the subway entrance, each floor, a zoomed-out view of each district (district1-3), loot, the character and equipment pages, tooltips, combat and pause.
 
-This is still a prototype. Equipped gear does not yet change the 3D hero's look. A town hub, vendors, pets, skill trees, campaign quests, music, multiplayer, and a standalone exported build are not included yet. The interface uses the Bahnschrift and Georgia fonts that come with Windows, with local fallbacks.
+This is still a prototype. Equipped gear does not yet change the 3D hero's look. A town hub, vendors, pets, skill trees, campaign quests, multiplayer, and a standalone exported build are not included yet. The interface uses the Bahnschrift and Georgia fonts that come with Windows, with local fallbacks.
 
 ## Validation
 
-The project was tested with Godot 4.7.2. Native checks cover 60 generated city floors (every street at least six cells wide, every cell reachable, props never walling anything off, an open subway entrance, no enemies at the start, neon signs on the buildings), equal speed in eight directions, motion at 15/30/60/144 FPS, stopping and reversing, swept wall collision, wall sliding, body-target aiming, swing timing, queued combos, finisher damage, held attacks, single hits per swing, dodge cancellation, obstruction checks, enemy line of sight, pathfinding, wind-ups and spacing, walled Ember Nova and its mana cost, every class's basic attack and four skills (locked until their level, then hitting and going on cooldown), click-to-move around walls and click-to-chase, the leveling pace, progression and stat points, item generation, equipping, swapping, sockets, salvage, sorting, dropping and picking up loot, elemental effects, saves, menus, and synthesized sound waveforms:
+The project was tested with Godot 4.7.2. Native checks cover 60 generated city floors (every street at least six cells wide, every cell reachable, props never walling anything off, an open subway entrance, no enemies at the start, neon signs on the buildings), equal speed in eight directions, motion at 15/30/60/144 FPS, stopping and reversing, swept wall collision, wall sliding, body-target aiming, swing timing, queued combos, finisher damage, held attacks, single hits per swing, dodge cancellation, obstruction checks, enemy line of sight, pathfinding, wind-ups and spacing, walled Ember Nova and its mana cost, every class's basic attack and four skills (locked until their level, then hitting and going on cooldown), click-to-move around walls and click-to-chase, the leveling pace, progression and stat points, item generation, equipping, swapping, sockets, salvage, sorting, dropping and picking up loot, elemental effects, saves, menus, synthesized sound waveforms, and that both music tracks load and loop:
 
 `godot --headless --path . -- --smoke-test`
 

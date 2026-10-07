@@ -38,8 +38,12 @@ static func run(g) -> void:
 	var peak = 0
 	for i in range(0,stream.data.size(),2): peak = maxi(peak,absi(stream.data.decode_s16(i)))
 	check.call(peak>100 and peak<32767,"Audio has a non-silent bounded waveform")
+	for track in Synth.TRACKS:
+		var music = load(Synth.TRACKS[track])
+		check.call(music is AudioStreamWAV and music.loop_mode==AudioStreamWAV.LOOP_FORWARD and music.get_length()>10,"The %s music loads and loops" % track)
+	check.call(not g.synth.enabled and g.synth.track!="","Sound stays off during tests and a floor picks its music")
 	if failures.is_empty():
-		print("PASS: 60 connected city floors with wide streets, an open subway entrance, a quiet start and props that never wall anything off; equal eight-way speed; 15/30/60/144 FPS motion; braking/reversal; swept collision and sliding; visible-body aim; timed damage; buffered combo/finisher; no double hits; dodge cancellation; enemy line of sight, pathfinding, wind-ups and spacing; walled nova and mana; three classes, their skills and unlock levels; click-to-move and chase; leveling pace; progression; stat points; item generation; equip, swap, sockets, salvage, sort; elemental effects; loot pickup; saves; menus; audio.")
+		print("PASS: 60 connected city floors with wide streets, an open subway entrance, a quiet start and props that never wall anything off; equal eight-way speed; 15/30/60/144 FPS motion; braking/reversal; swept collision and sliding; visible-body aim; timed damage; buffered combo/finisher; no double hits; dodge cancellation; enemy line of sight, pathfinding, wind-ups and spacing; walled nova and mana; three classes, their skills and unlock levels; click-to-move and chase; leveling pace; progression; stat points; item generation; equip, swap, sockets, salvage, sort; elemental effects; loot pickup; saves; menus; audio and looping music.")
 	else: print("FAIL: ",failures)
 	g.get_tree().quit(0 if failures.is_empty() else 1)
 

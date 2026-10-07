@@ -19,7 +19,7 @@ extends Node2D
 ##   item_art.gd           item icons
 ##   ui_kit.gd             the interface look (panels, chrome text, orbs)
 ##   painter.gd            shared drawing primitives
-##   synth.gd              synthesized sound effects
+##   synth.gd              synthesized sound effects and synthwave music
 ##   save_game.gd          floor checkpoints
 ##   tests/                --smoke-test and --render-check
 
@@ -168,6 +168,7 @@ func _ready() -> void:
 	var args = OS.get_cmdline_user_args()
 	testing = "--smoke-test" in args or "--render-check" in args
 	if testing: save_file = "user://faithful-port-test.json"
+	synth.enabled = not testing
 	if not "--smoke-test" in args and not "--2d" in args:
 		view3d = View3D.new()
 		add_child(view3d)
@@ -234,6 +235,7 @@ func _carve(x: int,y: int,w: int,h: int) -> void:
 
 func _generate(number: int) -> void:
 	floor_number = number
+	synth.set_track("boss" if number==3 else "street")
 	cells.clear(); seen.clear(); rooms.clear(); enemies.clear(); props.clear()
 	drops.clear(); particles.clear(); texts.clear(); waves.clear()
 	fx.clear(); decals.clear(); blocked.clear(); hurt_flash = 0
