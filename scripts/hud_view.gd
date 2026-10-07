@@ -49,6 +49,7 @@ func draw() -> void:
 	_messages()
 	_level_banner()
 	inventory_view.draw()
+	_utility_panel()
 	if g.state in ["paused", "victory", "defeat"]:
 		_modal()
 		return
@@ -63,9 +64,16 @@ func _screen() -> Vector2:
 
 # --- Top left: portrait, health and mana, page buttons ----------------------------
 
-func _top_left(character_open: bool) -> void:
-	# The character page shows all of this, and its crest sits here.
-	if character_open: return
+func _top_left(_character_open: bool) -> void:
+	var labels = [["character", "Character"], ["quests", "Quests"], ["inventory", "Inventory"], ["companion", "Companion"]]
+	for i in labels.size():
+		ui.button("toggle_"+labels[i][0], Rect2(16+i*100, 14, 94, 32), labels[i][1], g.panels.get(labels[i][0], false), 12)
+	if g.player.points>0:
+		ui.text("!", Vector2(101, 15), 13, Data.UPGRADE, ui.CENTER, ui.font_bold)
+
+## Retained portrait and resource-bar layout for the future companion feature.
+## Deliberately not drawn until a companion system supplies its own actor data.
+func _reserved_companion_portrait() -> void:
 	var player = g.player
 	var frame = Rect2(16, 14, 66, 66)
 	ui.rect(frame.grow(3), Color(0, 0, 0, 0.45))
@@ -81,21 +89,28 @@ func _top_left(character_open: bool) -> void:
 	ui.text("THE WAYFARER", Vector2(94, 14), 11, Data.SUN_YELLOW, ui.LEFT, ui.font_bold, 3)
 	ui.bar(Rect2(94, 30, 214, 17), player.hp/player.max_hp, Data.HEALTH, "%d / %d" % [ceili(player.hp), roundi(player.max_hp)], 10)
 	ui.bar(Rect2(94, 50, 214, 13), player.mana/maxf(1, player.max_mana), Data.MANA, "%d / %d" % [floori(player.mana), roundi(player.max_mana)], 9)
-	var buttons = [["toggle_character", "character", "C"], ["toggle_inventory", "inventory", "I"], ["toggle_map", "map", "M"]]
-	for i in buttons.size():
-		var r = Rect2(94+i*38, 70, 32, 32)
-		var hovered = r.has_point(g.pointer)
-		ui.rect(r, Color("2a1648") if hovered else Color("100820e6"))
-		ui.rect(r, Data.NEON_CYAN if hovered else Color(Data.PANEL_EDGE, 0.9), false, 1)
-		ui.icon(buttons[i][1], r.get_center()+Vector2(0, -1), 20, Data.CHROME if hovered else Data.INK)
-		ui.text(buttons[i][2], r.position+Vector2(3, 1), 8, Data.SUN_YELLOW, ui.LEFT, ui.font_bold)
-		g.buttons.append({"id":buttons[i][0], "rect":r})
-	if player.points>0:
-		var dot = Vector2(94+28, 72)
-		var pulse = 0.5+sin(g.clock*5)*0.5
-		ui.glow(dot, 14, Color(Data.UPGRADE, 0.3+pulse*0.3))
-		ui.circle(dot, 7, Data.UPGRADE.darkened(0.2))
-		ui.text("!", Vector2(dot.x, dot.y-7), 11, Color.WHITE, ui.CENTER, ui.font_bold)
+
+func _utility_panel() -> void:
+	if not g.panels.quests and not g.panels.companion: return
+	var r = Rect2(24, 64, 520, 350)
+	ui.panel(r)
+	var companion: bool = g.panels.companion
+	ui.text("COMPANION" if companion else "QUESTS", r.position+Vector2(24, 22), 22, Data.SUN_YELLOW, ui.LEFT, ui.font_bold)
+	ui.button("close_shop", Rect2(r.end.x-78, r.position.y+16, 60, 28), "Close")
+	if companion:
+		ui.text("No companion yet.", r.position+Vector2(24, 86), 16, Data.INK)
+		ui.text("Your companion's details will appear here.", r.position+Vector2(24, 118), 13, Data.INK_MUTED)
+	else:
+		ui.text("The Heart Below", r.position+Vector2(24, 72), 17, Data.NEON_PINK)
+		ui.text("Defeat the Ash Warden in Sunset Plaza.", r.position+Vector2(24, 101), 13, Data.INK)
+		var y = r.position.y+151
+		for kind in Zones.QUESTS:
+			if not g.player.get("quests", {}).has(kind): continue
+			var quest = Zones.QUESTS[kind]
+			var done = g.player.quests[kind]=="done"
+			ui.text(quest.title+(" — Complete" if done else " — Active"), Vector2(r.position.x+24, y), 15, Data.UPGRADE if done else Data.SUN_YELLOW)
+			ui.text(quest.task, Vector2(r.position.x+24, y+23), 12, Data.INK)
+			y += 57
 
 ## The 2D hero art as a class would look, for a class card.
 func _card_hero(id: String, feet: Vector2) -> void:

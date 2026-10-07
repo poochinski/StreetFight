@@ -146,7 +146,7 @@ var item_art
 var loot_view
 ## Derived hero stats (damage, crit, armor...), rebuilt by _recalc when gear or points change.
 var stats = {}
-var panels = {"character":false, "inventory":false}
+var panels = {"character":false, "inventory":false, "quests":false, "companion":false}
 ## The item on the mouse cursor while the panels are open.
 var held = null
 var loot_feed: Array = []
@@ -358,7 +358,7 @@ func _begin(continue_game: bool = false, class_id: String = "") -> void:
 		player.quests = world.get("quests",{}).duplicate()
 		place = world.get("area",{"kind":"street","level":number,"arrive":"start"})
 	state = "play"
-	panels.character = false; panels.inventory = false
+	panels.quests = false; panels.companion = false; panels.character = false; panels.inventory = false
 	held = null; loot_feed.clear(); level_banner = 0
 	keys.clear(); attack_held = false; pointer_active = false
 	if not player.has("quests"): player.quests = {}
@@ -846,17 +846,20 @@ func _pause() -> void:
 ## Opens or closes one of the two pages. The game pauses while either is open.
 func _toggle_panel(name: String) -> void:
 	if state!="play" and state!="inventory": return
-	panels[name] = not panels[name]
+	var opening = not panels[name]
+	if name in ["quests", "companion"] or panels.quests or panels.companion:
+		for panel in panels: panels[panel] = false
+	panels[name] = opening
 	_panels_changed()
 
 func _close_panels() -> void:
-	panels.character = false; panels.inventory = false; shop = ""
+	panels.quests = false; panels.companion = false; panels.character = false; panels.inventory = false; shop = ""
 	_panels_changed()
 
 func _panels_changed() -> void:
 	if not panels.inventory: Inventory.stow_held(self)
 	if panels.character or not panels.inventory: shop = ""
-	state = "inventory" if panels.character or panels.inventory or shop!="" else "play"
+	state = "inventory" if panels.character or panels.inventory or panels.quests or panels.companion or shop!="" else "play"
 	keys.clear(); attack_held = false
 	attack_buffer = 0; screen_velocity = Vector2.ZERO
 	walk_target = null
@@ -869,7 +872,7 @@ func _character() -> void:
 	_toggle_panel("character")
 
 func _finish(won: bool) -> void:
-	panels.character = false; panels.inventory = false; held = null
+	panels.quests = false; panels.companion = false; panels.character = false; panels.inventory = false; held = null
 	state = "victory" if won else "defeat"
 	keys.clear(); attack_held = false
 	victory_timer = -1
@@ -992,6 +995,8 @@ func _activate(id: String,right: bool = false,shift: bool = false) -> void:
 		"pause", "resume": _pause()
 		"inventory", "close_inventory", "toggle_inventory": _inventory()
 		"close_character", "toggle_character": _character()
+		"toggle_quests": _toggle_panel("quests")
+		"toggle_companion": _toggle_panel("companion")
 		"close_shop": _close_panels()
 		"buy_potion": Inventory.buy_potion(self)
 		"toggle_map": map_visible = not map_visible

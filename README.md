@@ -1,5 +1,13 @@
 # Dungeon Crawler — native Godot edition
 
+## Entrance and HUD update — October 7, 2026
+
+- Starlight Mall now has a broad glass frontage, illuminated canopy and marked parking forecourt with a central pedestrian approach.
+- Liberty Park has an open path framed by fence wings and trees. Its return entrance opens onto a sidewalk and street. Approach and press E to travel, as before.
+- Subway entrances occupy recessed sidewalk bays, with steps descending through an opening in the pavement.
+- The top-left HUD contains Character, Quests, Inventory and Companion buttons. The duplicate player portrait, health and mana display is hidden; its layout is retained for future companion work. Companion currently opens an empty panel. The minimap is unchanged.
+- Entrance and panel previews can be generated with `godot --path . --script scripts/tests/entrance_preview.gd`. Add `--headless` and `-- --smoke-test` to run the gameplay checks using an isolated checkpoint inside the project's previews folder.
+
 ## Combat refinement build — October 7, 2026
 
 This copy starts from the supplied 3D city version, using its original Knight, Rogue and Mage. The experimental modular characters and dressing room are set aside and are not loaded here. Double-click **Play This Folder.bat** to play this build.

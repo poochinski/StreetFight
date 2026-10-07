@@ -29,6 +29,14 @@ static func run(g) -> void:
 	_elites(g,check)
 	_zones(g,check)
 	g._begin()
+	g._activate("toggle_quests")
+	check.call(g.state=="inventory" and g.panels.quests, "Quest button opens a paused quest panel")
+	g._activate("toggle_companion")
+	check.call(g.panels.companion and not g.panels.quests, "Companion button switches from quests")
+	g._activate("toggle_character")
+	check.call(g.panels.character and not g.panels.companion, "Character button leaves companion panel")
+	g._close_panels()
+	check.call(g.state=="play" and not g.panels.values().has(true), "Closing panels resumes play")
 	_items(g,check)
 	var finished: Array = []
 	_inventory(g,check,finished)
@@ -104,7 +112,13 @@ static func _zones(g, check: Callable) -> void:
 		var reach = _reach(g,g.player.pos)
 		var doors = g.exits.filter(func(e): return e.kind=="door")
 		check.call(doors.size()==Zones.DOORS[level].size(),"Street %d has a doorway for each side area" % level)
-		for d in doors: check.call(reach.has(Vector2i(d.pos)) and not g.cells.has(Vector2i(d.wall)),"Doorways stand on the sidewalk in a building front")
+		for d in doors:
+			check.call(reach.has(Vector2i(d.pos)), "Every entrance is reachable")
+			if d.get("landmark", false):
+				check.call(g.cell_style.get(Vector2i(d.pos), "") in ["pavers", "dirt"], "Landmark entrance has an open approach")
+			else: check.call(not g.cells.has(Vector2i(d.wall)), "Ordinary doorway sits in a building front")
+		for e in g.exits:
+			if e.kind=="subway": check.call(g.cells.get(Vector2i(e.pos), 0)==3, "Subway entrance sits on the sidewalk")
 		check.call(g.exits.any(func(e): return e.kind=="subway" and e.to[2]=="west")==(level<3),"Streets before the last have a subway entrance")
 		check.call(g.exits.any(func(e): return e.kind=="subway" and e.to[2]=="east")==(level>1),"Later streets have stairs back down to the last station")
 		for e in g.enemies:

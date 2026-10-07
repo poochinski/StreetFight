@@ -164,6 +164,10 @@ static func generate(g, number: int) -> void:
 		if z.type=="arena":
 			g.decals = g.decals.filter(func(d): return not (d.kind in ["manhole","pothole"] and z.rect.has_point(Vector2i(d.pos))))
 	_add_doors(g,number)
+	_landmark_entrances(g)
+	var forward = _sidewalk_subway(g, g.stairs) if number<Zones.STREETS else {}
+	var backward = _sidewalk_subway(g, start_zone.pos) if number>1 else {}
+	if not forward.is_empty(): g.stairs = forward.pos
 	_add_signs(g,number)
 	# No neon sign crowds a doorway's marquee.
 	for door in g.exits:
@@ -174,11 +178,11 @@ static func generate(g, number: int) -> void:
 	# past the first street, stairs at the start lead back down to the last one.
 	g.arrivals["start"] = start_zone.pos
 	if number<Zones.STREETS:
-		g.exits.append({"kind":"subway","pos":g.stairs,"to":["subway",number,"west"],"label":"Take the subway to %s" % Zones.street_name(number+1),"face":Vector2.DOWN})
+		g.exits.append({"kind":"subway","pos":g.stairs,"to":["subway",number,"west"],"label":"Take the subway to %s" % Zones.street_name(number+1),"face":forward.face})
 		g.arrivals["subway"] = _beside(g,g.stairs,2.0)
 	if number>1:
-		g.exits.append({"kind":"subway","pos":start_zone.pos,"to":["subway",number-1,"east"],"label":"Subway back to %s" % Zones.street_name(number-1),"face":Vector2.DOWN})
-		g.arrivals["start"] = _beside(g,start_zone.pos,2.0)
+		g.exits.append({"kind":"subway","pos":backward.pos,"to":["subway",number-1,"east"],"label":"Subway back to %s" % Zones.street_name(number-1),"face":backward.face})
+		g.arrivals["start"] = _beside(g,backward.pos,2.0)
 	g.player.pos = g.arrivals["start"]
 
 ## Open ground about distance cells from point, for arriving beside an exit.
@@ -210,6 +214,9 @@ static func _add_doors(g, number: int) -> void:
 		for relax in [1.0,0.6,0.0]:
 			var found = false
 			for pair in candidates:
+				if kind in ["mall", "park"]:
+					var back: Vector2i = pair[0]+pair[1]*6
+					if back.x<5 or back.y<5 or back.x>SIZE-6 or back.y>SIZE-6: continue
 				var pos = Vector2(pair[0])+Vector2(0.5,0.5)
 				if pos.distance_to(start)<12*relax or pos.distance_to(g.stairs)<8*relax: continue
 				var crowded = false
@@ -223,6 +230,59 @@ static func _add_doors(g, number: int) -> void:
 				found = true
 				break
 			if found: break
+
+## Carve a forecourt into the block so entrances have space beyond the sidewalk.
+static func _landmark_entrances(g) -> void:
+	for e in g.exits:
+		if e.get("zone", "") not in ["mall", "park"]: continue
+		var origin = Vector2i(e.pos)
+		var inward = -Vector2i(e.face)
+		var along = Vector2i(inward.y, inward.x)
+		var footprint = {}
+		for depth in range(0, 6):
+			for width in range(-4, 5):
+				var cell = origin+inward*depth+along*width
+				if cell.x<1 or cell.y<1 or cell.x>=SIZE-1 or cell.y>=SIZE-1: continue
+				footprint[cell] = true
+				g.cells[cell] = LOT
+				g.cell_style[cell] = ("pavers" if absi(width)<=1 or depth>=4 else "parking") if e.zone=="mall" else ("dirt" if absi(width)<=1 else "grass")
+				g.blocked.erase(cell)
+		g.props = g.props.filter(func(pr): return not footprint.has(Vector2i(pr.pos)))
+		g.decals = g.decals.filter(func(pr): return not footprint.has(Vector2i(pr.pos)))
+		e.pos = Vector2(origin+inward*(5 if e.zone=="mall" else 2))+Vector2(0.5,0.5)
+		e.wall = Vector2i(e.pos)+inward
+		e["landmark"] = true
+		g.arrivals["door:"+e.zone] = e.pos+e.face*0.6
+
+## A recessed sidewalk bay keeps the stairs out of traffic, with a clear approach.
+static func _sidewalk_subway(g, near: Vector2) -> Dictionary:
+	var best = {}
+	var distance = INF
+	for cell in g.cells:
+		if g.cells[cell]!=SIDEWALK: continue
+		for face in [Vector2i.DOWN, Vector2i.RIGHT, Vector2i.UP, Vector2i.LEFT]:
+			if g.cells.get(cell+face, 0)!=CORRIDOR: continue
+			if cell.x<4 or cell.y<4 or cell.x>SIZE-5 or cell.y>SIZE-5: continue
+			var pos = Vector2(cell-face)+Vector2(0.5,0.5)
+			if g.exits.any(func(e): return e.pos.distance_to(pos)<10): continue
+			if pos.distance_to(near)<distance:
+				distance = pos.distance_to(near)
+				best = {"pos":pos, "face":Vector2(face)}
+	if best.is_empty(): return {"pos":near, "face":Vector2.DOWN}
+	var center = Vector2i(best.pos)
+	var outward = Vector2i(best.face)
+	var side = Vector2i(outward.y, outward.x)
+	var footprint = {}
+	for depth in range(-2, 2):
+		for width in range(-2, 3):
+			var cell = center+outward*depth+side*width
+			footprint[cell] = true
+			g.cells[cell] = SIDEWALK
+			g.blocked.erase(cell)
+			g.cell_style.erase(cell)
+	g.props = g.props.filter(func(pr): return not footprint.has(Vector2i(pr.pos)))
+	g.decals = g.decals.filter(func(pr): return not footprint.has(Vector2i(pr.pos)))
+	return best
 
 static func _zone(r: Rect2i,type: String,grid: Vector2i = Vector2i(-1,-1)) -> Dictionary:
 	return {"pos":Vector2(r.position)+Vector2(r.size)/2.0,"w":r.size.x,"h":r.size.y,"rect":r,"role":"plain","type":type,"grid":grid}
