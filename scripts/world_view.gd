@@ -133,6 +133,7 @@ func draw(shake_offset: Vector2) -> void:
 		c.draw_texture_rect(darkness,Rect2(hero-Vector2(850,500),Vector2(1700,1000)),false)
 	city.signs(Rect2(-g.position/g.scale,c.get_viewport_rect().size/g.scale).grow(160))
 	effects.draw_ground()
+	_draw_hazards()
 	for z in g.zones: _draw_zone(z)
 	if g.state=="play" and g.pointer_active:
 		var target = g._cursor_target()
@@ -186,6 +187,7 @@ func _draw_projectiles() -> void:
 func _draw_over_3d(shake_offset: Vector2) -> void:
 	c.draw_set_transform(shake_offset)
 	effects.draw_ground()
+	_draw_hazards()
 	for z in g.zones: _draw_zone(z)
 	if g.state=="play" and g.pointer_active:
 		var target = g._cursor_target()
@@ -268,6 +270,15 @@ func _draw_zone(z: Dictionary) -> void:
 		"barrage":
 			var fade = minf(1.0,z.life/0.3)
 			p.ellipse_arc(s,r*45,r*23,0,TAU,Color(0.25,0.95,1,0.6*fade),2)
+
+## A Molten elite's death blast: a red ring that fills in before it goes off.
+func _draw_hazards() -> void:
+	for h in g.hazards:
+		var s = g._project(h.pos)
+		var t = 1.0-clampf(h.delay/h.max_delay, 0, 1)
+		var r: float = h.radius
+		p.ellipse(s, r*45*t, r*23*t, Color(1, 0.35, 0.1, 0.22), 36)
+		p.ellipse_arc(s, r*45, r*23, 0, TAU, Color(1, 0.4, 0.15, 0.6+0.4*sin(g.clock*30)), 2.5)
 
 ## A grenade arcing through the air, or a meteor falling from the sky.
 func _draw_falling(z: Dictionary) -> void:

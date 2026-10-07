@@ -9,6 +9,8 @@ const Items = preload("res://scripts/items.gd")
 const Inventory = preload("res://scripts/inventory.gd")
 const SaveGame = preload("res://scripts/save_game.gd")
 const Classes = preload("res://scripts/classes.gd")
+const Elites = preload("res://scripts/elites.gd")
+const Data = preload("res://scripts/data.gd")
 
 static func run(g) -> void:
 	var failures: Array[String] = []
@@ -23,6 +25,7 @@ static func run(g) -> void:
 	_progression(g,check)
 	_classes(g,check)
 	_click_to_move(g,check)
+	_elites(g,check)
 	g._begin()
 	_items(g,check)
 	var finished: Array = []
@@ -214,11 +217,12 @@ static func _combat(g, check: Callable) -> void:
 	check.call(enemy.hp==after_cancel and g.swing.is_empty(),"Cancelled attack cannot resolve later")
 	# Holding attack should repeat naturally, without generating multiple hits per swing.
 	g.player.roll = 0; g.player.attack = 0; g.attack_buffer = 0; g.swing.clear()
-	enemy.pos = g.player.pos+Vector2(0.7,0); enemy.hp = 1000; enemy.attack = 100
+	enemy.pos = g.player.pos+Vector2(0.7,0); enemy.hp = 1000; enemy.attack = 100; enemy.knock = Vector2.ZERO
 	g.keys[KEY_J] = true
 	for i in 4: g._advance_game(0.25)
 	g.keys.clear()
-	check.call(enemy.hp<950 and enemy.hp>850,"Holding J chains bounded repeated attacks")
+	# The finisher knocks the target out of reach, so a second combo needs a step forward.
+	check.call(enemy.hp<=960 and enemy.hp>850,"Holding J chains bounded repeated attacks")
 	# Neither assisted aiming nor a wide melee arc should reach through a wall.
 	g.player.roll = 0; g.player.attack = 0; g.swing.clear()
 	g.cells.clear(); g.blocked.clear(); g._carve(1,1,20,20)
@@ -238,6 +242,71 @@ static func _walled_arena(g) -> void:
 	DungeonGenerator.build_navigation(g)
 	g.keys.clear(); g.attack_held = false; g.swing.clear(); g.screen_velocity = Vector2.ZERO
 	g.player.roll = 0; g.player.attack = 0; g.player.dodge = 0; g.player.nova = 0
+
+## Elite packs spawn with names and traits, each trait does its job, and heavy
+## hits knock enemies back (but not the boss or a Juggernaut).
+static func _elites(g, check: Callable) -> void:
+	g._begin()
+	var rares = 0; var champions = 0; var minions = 0
+	for floor_number in [1,2,3]:
+		for k in 6:
+			g.seed_value = 4100+k*31+floor_number
+			g._generate(floor_number)
+			for e in g.enemies:
+				if e.has("elite"):
+					if e.elite.rank=="rare":
+						rares += 1
+						check.call(e.elite.name!="" and e.elite.affixes.size()>=2,"Rare elites have a name and at least two traits")
+					else: champions += 1
+					check.call(e.max_hp>Data.ENEMIES[e.kind].hp*1.9,"Elites have extra health")
+				if e.get("minion",false): minions += 1
+	check.call(rares>0 and champions>0 and minions>0,"Elite packs appear (%d rare, %d champion, %d minions in 18 floors)" % [rares,champions,minions])
+	print("Elite checks: %d rare leaders, %d champions, %d minions in 18 floors" % [rares,champions,minions])
+	_steady(g)
+	_walled_arena(g)
+	g.player.pos = Vector2(4.5,5.5)
+	# Knockback: a finisher-strength shove moves an imp, a Juggernaut and the boss stay put.
+	var imp = g._spawn_enemy("imp",Vector2(5.5,5.5))
+	imp.attack = 100.0; imp.alert = true
+	Elites.knock(imp,g.player.pos,7.5)
+	for k in 6: EnemyAI.update_all(g,0.05)
+	check.call(imp.pos.x>6.2,"Heavy hits knock enemies back (%.2f)" % imp.pos.x)
+	var boss = g._spawn_enemy("boss",Vector2(5.5,7.5))
+	boss.attack = 100.0
+	var boss_start = boss.pos
+	Elites.knock(boss,g.player.pos,7.5)
+	check.call(boss.get("knock",Vector2.ZERO)==Vector2.ZERO and boss.pos==boss_start,"The boss shrugs off knockback")
+	g.enemies.clear()
+	var brute = g._spawn_enemy("brute",Vector2(6.5,5.5))
+	brute.attack = 100.0
+	Elites._make_elite(g,brute,"champion",["chrome","juggernaut"])
+	Elites.knock(brute,g.player.pos,7.5)
+	check.call(brute.get("knock",Vector2.ZERO)==Vector2.ZERO,"Juggernaut elites can't be knocked back")
+	var before = brute.hp
+	g._damage_enemy(brute,100)
+	check.call(is_equal_approx(before-brute.hp,60.0),"Chrome Plated elites take 40% less damage")
+	# Vampiric heals on a hit; Molten burns the hero and leaves a death blast.
+	var vamp = g._spawn_enemy("imp",Vector2(5.2,5.5))
+	Elites._make_elite(g,vamp,"champion",["vampiric","molten"])
+	vamp.hp = vamp.max_hp*0.5
+	var hp_vamp = vamp.hp
+	Elites.on_hit_hero(g,vamp,10.0)
+	check.call(vamp.hp>hp_vamp,"Vampiric elites heal when they hit")
+	check.call(g.player.get("burn",0.0)>0,"Molten hits set the hero burning")
+	var hero_hp = g.player.hp
+	for k in 6: Elites.update_hero_burn(g,0.25)
+	check.call(g.player.hp<hero_hp,"Burning hurts the hero over time")
+	g.player.burn = 0.0
+	g.player.hp = g.player.max_hp; g.player.inv = 0
+	g._damage_enemy(vamp,99999)
+	check.call(g.hazards.size()==1,"A Molten elite leaves a blast when it dies")
+	var hp_blast = g.player.hp
+	g.player.inv = 0
+	for k in 20: Elites.update_hazards(g,0.05)
+	check.call(g.hazards.is_empty() and g.player.hp<hp_blast,"The Molten blast goes off and hurts a hero standing in it")
+	check.call(not g.drops.is_empty(),"Elites drop loot")
+	g.enemies.clear(); g.drops.clear(); g.hazards.clear()
+	g.player.hp = g.player.max_hp
 
 ## Every class: its basic attack lands, each skill is locked until its level and
 ## then hits, and leveling is slow enough to take the whole game to reach level 6.

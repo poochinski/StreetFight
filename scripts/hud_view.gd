@@ -8,6 +8,7 @@ const Items = preload("res://scripts/items.gd")
 const UiKit = preload("res://scripts/ui_kit.gd")
 const InventoryView = preload("res://scripts/inventory_view.gd")
 const Classes = preload("res://scripts/classes.gd")
+const Elites = preload("res://scripts/elites.gd")
 
 const ORB_RADIUS = 56.0
 const HOTBAR_SLOT = 48.0
@@ -38,6 +39,7 @@ func draw() -> void:
 		return
 	var open = g.panels
 	g.loot_view.draw_labels(ui)
+	_enemy_bars()
 	_enemy_plate()
 	_top_left(open.character)
 	_top_right(open.inventory)
@@ -196,6 +198,32 @@ func _quests(origin: Vector2) -> void:
 
 # --- Enemy plate and boss bar -----------------------------------------------------
 
+## Screen height above an enemy's feet where its health bar floats.
+func _enemy_top(e: Dictionary) -> float:
+	var h = Data.ENEMIES[e.kind].height*Data.CHARACTER_SCALE*e.get("size_mult", 1.0)
+	return h*2.15+10 if g.view3d else h+12
+
+## Small health bars over hurt or fighting enemies; elites also show their
+## name and traits in their colour, like Diablo's champions and rares.
+func _enemy_bars() -> void:
+	if g.state!="play": return
+	var view = Rect2(Vector2.ZERO, _screen()).grow(40)
+	for e in g.enemies:
+		if e.hp<=0 or e.kind=="boss" or not g.seen.has(Vector2i(e.pos)): continue
+		var elite = e.has("elite")
+		if not (elite or e.alert or e.hp<e.max_hp): continue
+		var head = g._to_screen(g._project(e.pos, _enemy_top(e)))
+		if not view.has_point(head): continue
+		var width = 52.0 if elite else 36.0
+		var r = Rect2(head.x-width/2, head.y, width, 5 if elite else 4)
+		var tint = Elites.color(e)
+		ui.rect(r.grow(1), Color(0, 0, 0, 0.75))
+		ui.rect(Rect2(r.position, Vector2(r.size.x*clampf(e.hp/e.max_hp, 0, 1), r.size.y)), Data.HEALTH)
+		if elite or e.get("minion", false): ui.rect(r.grow(1), Color(tint, 0.9), false, 1.0)
+		if elite and e.pos.distance_to(g.player.pos)<10:
+			ui.text(Elites.title(e), Vector2(head.x, head.y-16), 11, tint, ui.CENTER, ui.font_bold, 3)
+			ui.text(Elites.traits_text(e), Vector2(head.x, head.y-28), 9, Color(tint, 0.85), ui.CENTER, null, 3)
+
 func _enemy_plate() -> void:
 	if g.state!="play": return
 	var target = {}
@@ -216,7 +244,11 @@ func _enemy_plate() -> void:
 	var width = 420.0 if boss else 300.0
 	var r = Rect2(cx-width/2, 46 if boss else 40, width, 14 if boss else 12)
 	if boss: ui.sun_crest(Vector2(cx, r.position.y-24), 16)
-	ui.chrome(Data.ENEMY_NAMES[target.kind].to_upper(), Vector2(cx, r.position.y-(24 if boss else 21)), 16 if boss else 13, ui.CENTER)
+	if target.has("elite") or target.get("minion", false):
+		ui.text(Elites.title(target).to_upper(), Vector2(cx, r.position.y-10), 14, Elites.color(target), ui.CENTER, ui.font_bold, 3)
+		var traits = Elites.traits_text(target)
+		if traits!="": ui.text(traits, Vector2(cx, r.position.y+r.size.y+14), 11, Color(Elites.color(target), 0.85), ui.CENTER)
+	else: ui.chrome(Data.ENEMY_NAMES[target.kind].to_upper(), Vector2(cx, r.position.y-(24 if boss else 21)), 16 if boss else 13, ui.CENTER)
 	ui.bar(r, target.hp/target.max_hp, Data.HEALTH.lerp(Data.SUNSET, 0.3), "%d / %d" % [ceili(target.hp), roundi(target.max_hp)], 9)
 
 # --- Bottom: orbs, hotbar and experience ------------------------------------------

@@ -40,6 +40,7 @@ const LootView = preload("res://scripts/loot_view.gd")
 const SmokeTest = preload("res://scripts/tests/smoke_test.gd")
 const RenderCheck = preload("res://scripts/tests/render_check.gd")
 const Classes = preload("res://scripts/classes.gd")
+const Elites = preload("res://scripts/elites.gd")
 const View3D = preload("res://scripts/world3d.gd")
 
 const RUN_SPEED = 175.0 # Screen pixels/second: all eight directions feel equally fast.
@@ -83,6 +84,8 @@ var blocked = {}
 var cell_style = {}
 var signs: Array = []
 var wall_cache = {}
+## Enemy hazards waiting to go off (a Molten elite's death blast).
+var hazards: Array = []
 var hurt_flash = 0.0
 var ghost_timer = 0.0
 var buttons: Array = []
@@ -236,6 +239,7 @@ func _generate(number: int) -> void:
 	fx.clear(); decals.clear(); blocked.clear(); hurt_flash = 0
 	cell_style.clear(); signs.clear(); wall_cache.clear()
 	walk_target = null
+	hazards.clear(); player.burn = 0.0
 	shots.clear(); zones.clear(); chase = {}; move_path = PackedVector2Array(); move_held = false
 	player.channel = {}; player.ranged_attack = {}; combat_target = {}; hitstop = 0
 	victory_timer = -1
@@ -442,8 +446,8 @@ func _resolve_swing() -> void:
 			var multiplier = 1.3 if swing.index==2 else 1.0
 			_strike_enemy(e,multiplier)
 			e.stagger = 0.04 if e.kind=="boss" else 0.18 if swing.index==2 else 0.11
-			var recoil = 0.06 if e.kind=="boss" else 0.45 if swing.index==2 else 0.2
-			_move(e,difference.normalized()*recoil,Data.ENEMIES[e.kind].radius)
+			if swing.index==2: Elites.knock(e,player.pos,7.5)
+			else: _move(e,difference.normalized()*(0.06 if e.kind=="boss" else 0.2),Data.ENEMIES[e.kind].radius)
 			var look = Items.weapon_look(_weapon())
 			if _weapon()!=null and Items.main_element(_weapon())=="" and int(_weapon().rarity)<2: look.glow=Color("c9e4ff")
 			Effects.hit(self,e.pos,difference.normalized(),look.glow.lerp(Color("ffc06a"),0.5 if swing.index==2 else 0.0),swing.index==2)
@@ -513,6 +517,7 @@ func _nova() -> void:
 		# The blast is stopped by walls, like melee.
 		if e.hp>0 and e.pos.distance_to(player.pos)<NOVA_RADIUS and _clear_path(player.pos,e.pos):
 			_damage_enemy(e,roundi(_nova_damage()*_between(0.94,1.06)))
+			Elites.knock(e,player.pos,8.0)
 
 func _dodge() -> void:
 	if state!="play" or player.dodge>0: return
@@ -561,15 +566,18 @@ func _hurt(amount: float) -> void:
 
 func _damage_enemy(e: Dictionary,amount: int,crit: bool = false,color: Color = Color("eed49a")) -> void:
 	if e.hp<=0: return
+	amount = Elites.adjust_damage(e,amount)
 	e.hp -= amount; e.hit = 0.15
 	EnemyAI.alert(self,e)
 	_burst(e.pos,Color("ffb95f") if e.kind=="boss" else Color("b9d182"),7)
 	if crit: _float_text(e.pos,"%d!" % amount,Data.NEON_PINK,true)
 	else: _float_text(e.pos,str(amount),color)
+	Elites.on_damaged(self,e)
 	if e.hp<=0:
 		kills += 1
 		_tone(100,0.18,"saw",0.025)
-		_gain_xp(Data.ENEMIES[e.kind].xp)
+		_gain_xp(roundi(Data.ENEMIES[e.kind].xp*e.get("xp_mult",1.0)))
+		Elites.on_death(self,e)
 		if stats.life_on_kill>0: player.hp = minf(player.max_hp,player.hp+stats.life_on_kill)
 		_drop_gold(e.pos,floori(_between(4,10))*floor_number)
 		if _random()<0.16: _drop(e.pos,{"kind":"potion"})
@@ -958,6 +966,8 @@ func _update(dt: float) -> void:
 	for entry in loot_feed: entry.life -= dt
 	loot_feed = loot_feed.filter(func(entry): return entry.life>0)
 	_update_statuses(dt)
+	Elites.update_hero_burn(self,dt)
+	Elites.update_hazards(self,dt)
 	for key in ["attack","nova","dodge","inv","roll"]: player[key] = maxf(0,player[key]-dt)
 	combo_window = maxf(0,combo_window-dt)
 	attack_buffer = maxf(0,attack_buffer-dt)
@@ -1057,7 +1067,9 @@ func _update_effects(dt: float) -> void:
 		if p.hostile:
 			if not _walkable(p.pos): p.life = 0
 			if p.pos.distance_to(player.pos)<0.45:
+				var hp_before = player.hp
 				_hurt(p.get("damage",13+floor_number*3))
+				if player.hp<hp_before and p.has("source"): Elites.on_hit_hero(self,p.source,hp_before-player.hp)
 				p.life = 0
 		else:
 			p.z += p.vz*dt

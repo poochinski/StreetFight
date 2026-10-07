@@ -10,6 +10,7 @@ extends RefCounted
 ## drawing but cannot be walked through or seen past.
 
 const Data = preload("res://scripts/data.gd")
+const Elites = preload("res://scripts/elites.gd")
 const SIZE = 64
 const ROOM = 1       # building interior floor
 const CORRIDOR = 2   # street asphalt
@@ -791,13 +792,20 @@ static func _spawn_enemies(g, number: int) -> void:
 		var count = 2+floori(g._random()*2)
 		if z.type in INTERIORS or z.type in PLAZAS or z.type=="collapsed": count += 1
 		if z.role=="stairs": count += 1
-		count = mini(count,budget)
+		var rank = Elites.roll_pack(g,number)
+		# Elite packs bring an extra body or two.
+		if rank=="rare": count += 2
+		elif rank=="champion": count = maxi(count,3)
+		count = mini(count,maxi(budget,3 if rank!="" else 0))
 		budget -= count
+		var pack: Array = []
 		for j in count:
 			var kind = "ranged" if g._random()<0.3 else "brute" if g._random()<0.4 else "imp"
 			var enemy = g._spawn_enemy(kind,_spot(g,z,1.0,start,10.0))
 			enemy.attack = g._between(0.2,1.5)
 			enemy.phase = g._random()*6
+			pack.append(enemy)
+		if rank!="": Elites.promote_pack(g,pack,rank,number)
 	if number==3:
 		var arena = g.rooms[g.rooms.size()-1]
 		g.enemies = g.enemies.filter(func(e): return e.pos.distance_to(g.stairs)>9)

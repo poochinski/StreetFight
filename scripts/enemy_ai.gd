@@ -4,6 +4,7 @@ extends RefCounted
 
 const Data = preload("res://scripts/data.gd")
 const Effects = preload("res://scripts/effects.gd")
+const Elites = preload("res://scripts/elites.gd")
 const REPATH_INTERVAL = 0.35
 
 static func update_all(g, dt: float) -> void:
@@ -30,6 +31,8 @@ static func _update_enemy(g, e: Dictionary, dt: float) -> void:
 	var stats = Data.ENEMIES[e.kind]
 	e.hit = maxf(0,e.hit-dt)
 	e.attack -= dt
+	if Elites.update_knock(g,e,dt): return
+	if Elites.has_affix(e,"juggernaut"): e.stagger = 0
 	# Heavy enemies power through hits during a wind-up and must be dodged.
 	if e.windup>0 and not stats.interruptible: e.stagger = 0
 	if e.stagger>0:
@@ -69,8 +72,8 @@ static func _begin_windup(g, e: Dictionary, stats: Dictionary) -> void:
 	e.aim = (g.player.pos-e.pos).normalized()
 
 static func _strike(g, e: Dictionary, stats: Dictionary, d: float) -> void:
-	e.attack = stats.cooldown
-	var floor_scale = 0.8+g.floor_number*0.2
+	e.attack = stats.cooldown*e.get("cooldown_mult",1.0)
+	var floor_scale = (0.8+g.floor_number*0.2)*e.get("damage_mult",1.0)
 	if e.kind=="boss":
 		Effects.shockwave(g,e.pos,Data.BOSS_SLAM_RADIUS,Color("ff7752"),true)
 		g._burst(e.pos,Color("ff875e"),25,4)
@@ -80,13 +83,16 @@ static func _strike(g, e: Dictionary, stats: Dictionary, d: float) -> void:
 		if not g._clear_path(e.pos,g.player.pos): return
 		var direction = (g.player.pos-e.pos).normalized()
 		Effects.add(g,"impact",{"pos":e.pos+direction*0.3,"color":Color("b8f59a"),"size":0.8,"angle":0.0},0.15)
-		g.particles.append({"pos":e.pos,"z":30.0,"velocity":direction*4.5,"vz":0.0,"life":2.0,"color":Color("b8e799"),"size":5.0,"hostile":true,"damage":stats.damage+g.floor_number*3})
+		g.particles.append({"pos":e.pos,"z":30.0,"velocity":direction*4.5,"vz":0.0,"life":2.0,"color":Color("b8e799"),"size":5.0,"hostile":true,"damage":(stats.damage+g.floor_number*3)*e.get("damage_mult",1.0),"source":e})
 		g._tone(520,0.12,"sine",0.012)
 	else:
 		# The hit lands only if the hero is still in reach when the wind-up ends.
 		if d<stats.reach+0.25 and g._clear_path(e.pos,g.player.pos):
-			if g.player.inv<=0: Effects.hit(g,g.player.pos,e.aim,Color("ff8a6a"),e.kind=="brute")
+			var landed = g.player.inv<=0
+			if landed: Effects.hit(g,g.player.pos,e.aim,Color("ff8a6a"),e.kind=="brute")
+			var hp_before = g.player.hp
 			g._hurt(stats.damage*floor_scale)
+			if landed and g.player.hp<hp_before: Elites.on_hit_hero(g,e,hp_before-g.player.hp)
 		_lunge(g,e,stats)
 
 static func _lunge(g, e: Dictionary, stats: Dictionary) -> void:
@@ -107,7 +113,7 @@ static func _approach(g, e: Dictionary, stats: Dictionary, dt: float, sees: bool
 		target = e.path[0]
 	var direction = (target-e.pos).normalized()
 	# Ice damage chills: chilled enemies move at half speed.
-	var speed = stats.speed*(0.5 if e.get("chill",0.0)>0 else 1.0)
+	var speed = stats.speed*e.get("speed_mult",1.0)*(0.5 if e.get("chill",0.0)>0 else 1.0)
 	g._move(e,direction*speed*dt,stats.radius)
 
 static func _find_path(g, from: Vector2, to: Vector2) -> PackedVector2Array:
