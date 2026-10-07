@@ -204,15 +204,15 @@ func _character_page(r: Rect2) -> void:
 	var bottom = y+PANEL_HEIGHT-64
 	_vital_box(Rect2(x+24, bottom, 148, 26), "HP", "%d / %d" % [ceili(player.hp), roundi(s.max_hp)], Data.HEALTH)
 	_vital_box(Rect2(r.end.x-172, bottom, 148, 26), "MP", "%d / %d" % [floori(player.mana), roundi(s.max_mana)], Data.MANA)
-	var points_rect = Rect2(x+70, bottom+32, r.size.x-140, 22)
+	var points_rect = Rect2(x+24, bottom+32, r.size.x-122, 22)
 	ui.rect(points_rect, Color("0a0514e6"))
 	ui.rect(points_rect, Color(Data.UPGRADE if g.remaining_stat_points()>0 else Data.PANEL_EDGE, 0.8), false, 1)
 	ui.text("STAT POINTS", Vector2(points_rect.position.x+14, points_rect.position.y+4), 11, Data.SUN_YELLOW, ui.LEFT, ui.font_bold)
 	ui.text(str(g.remaining_stat_points()), Vector2(points_rect.end.x-14, points_rect.position.y+3), 13, Data.UPGRADE if g.remaining_stat_points()>0 else Data.INK, ui.RIGHT, ui.font_bold)
 
 	if not g.pending_stats.is_empty():
-		var confirm = Rect2(x+24, bottom+30, 30, 26)
-		var cancel = Rect2(r.end.x-54, bottom+30, 30, 26)
+		var confirm = Rect2(r.end.x-54, bottom+30, 30, 26)
+		var cancel = Rect2(r.end.x-90, bottom+30, 30, 26)
 		ui.button("confirm_stats", confirm, "")
 		ui.button("cancel_stats", cancel, "")
 		var at = confirm.get_center()
