@@ -1,0 +1,6 @@
+3D models by Kay Lousberg (KayKit), released under CC0 1.0 (public domain).
+https://kaylousberg.com  -  https://github.com/KayKit-Game-Assets
+
+characters/  KayKit Character Pack: Adventurers 1.0 and Skeletons 1.0
+weapons/     KayKit Character Pack: Skeletons 1.0 (weapon assets)
+city/        KayKit City Builder Bits 1.0

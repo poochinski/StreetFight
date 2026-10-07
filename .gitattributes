@@ -1,0 +1,14 @@
+# Keep line endings consistent between computers.
+* text=auto eol=lf
+*.bat text eol=crlf
+
+# Binary files: never try to merge or change line endings.
+*.png binary
+*.jpg binary
+*.glb binary
+*.bin binary
+*.ttf binary
+*.otf binary
+*.wav binary
+*.ogg binary
+*.mp3 binary

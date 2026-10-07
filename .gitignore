@@ -1,0 +1,16 @@
+# Godot's import cache. It is rebuilt automatically on the first run
+# (Play This Folder.bat imports the models if it is missing).
+.godot/
+
+# Exported game builds
+export/
+builds/
+
+# Windows and macOS clutter
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Test screenshots are re-rendered on every render check (22 MB);
+# keeping them out stops the repository from growing with each run.
+previews/
