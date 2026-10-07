@@ -47,11 +47,19 @@ func _weapon(item) -> void:
 	if int(item.rarity)>=2: p.glow(Vector2.ZERO, 22, Color(look.glow, 0.18))
 	characters.draw_weapon(Vector2(-9, 9), Vector2(13, -13), look, int(item.rarity), false)
 
+## Newer bases draw the nearest older icon in their own main color.
+const ICON_STYLES = ["coif", "helm", "visor", "gloves", "gauntlets", "boots", "greaves", "belt", "sash"]
+
+func _own_color(item, fallback: Color) -> Color:
+	if item.get("style", "") in ICON_STYLES: return fallback
+	var colors: Array = Items.base_info(item).get("colors", [])
+	return fallback if colors.is_empty() else Color(colors[0]).lerp(fallback, 0.15)
+
 func _trim(item) -> Color:
 	return Items.color(item) if int(item.rarity)>=1 else Color("c9a45c")
 
 func _helmet(item) -> void:
-	var steel: Color = STEEL[_tier(item)]
+	var steel: Color = _own_color(item, STEEL[_tier(item)])
 	var style = item.get("style", "helm")
 	var dome = []
 	for i in 13:
@@ -115,7 +123,7 @@ func _chest(item) -> void:
 
 func _gloves(item) -> void:
 	var gauntlet = item.get("style", "gloves")=="gauntlets"
-	var color: Color = STEEL[_tier(item)] if gauntlet else LEATHER[_tier(item)]
+	var color: Color = _own_color(item, STEEL[_tier(item)] if gauntlet else LEATHER[_tier(item)])
 	for i in 4:
 		var x = -7+i*4.6
 		p.limb(Vector2(x, -2), Vector2(x+0.5, -14+absf(i-1.5)*2), 4, color.lightened(0.08*i))
@@ -128,7 +136,7 @@ func _gloves(item) -> void:
 
 func _boots(item) -> void:
 	var greaves = item.get("style", "boots")=="greaves"
-	var color: Color = STEEL[_tier(item)] if greaves else LEATHER[_tier(item)]
+	var color: Color = _own_color(item, STEEL[_tier(item)] if greaves else LEATHER[_tier(item)])
 	p.poly([Vector2(-8, -15), Vector2(4, -15), Vector2(5, 4), Vector2(14, 7), Vector2(15, 13), Vector2(-8, 13)], color)
 	p.poly([Vector2(-8, -15), Vector2(-3, -15), Vector2(-3, 13), Vector2(-8, 13)], color.darkened(0.2))
 	p.poly([Vector2(-9, 11), Vector2(16, 11), Vector2(16, 15), Vector2(-9, 15)], Color("24160e"))
@@ -141,7 +149,7 @@ func _boots(item) -> void:
 		for y in [-8, -4, 0]: p.line(Vector2(-3, y), Vector2(3, y+1), Color("e8d8b0"), 0.8)
 
 func _belt(item) -> void:
-	var color: Color = LEATHER[_tier(item)]
+	var color: Color = _own_color(item, LEATHER[_tier(item)])
 	if item.get("style", "belt")=="sash":
 		color = Data.NEON_PURPLE.darkened(0.3).lerp(Items.color(item), 0.3)
 		p.poly([Vector2(-17, -5), Vector2(17, -5), Vector2(16, 3), Vector2(-16, 3)], color)

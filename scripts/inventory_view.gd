@@ -5,6 +5,7 @@ extends RefCounted
 
 const Data = preload("res://scripts/data.gd")
 const Items = preload("res://scripts/items.gd")
+const Classes = preload("res://scripts/classes.gd")
 
 const PANEL_TOP = 64.0
 const PANEL_HEIGHT = 600.0
@@ -327,7 +328,13 @@ func tooltip_lines(item: Dictionary, source: String) -> Array:
 		_line(lines, "Damage", 13, Data.INK_MUTED, null, "%d – %d" % [int(item.min), int(item.max)], Data.INK)
 		_line(lines, "Attack Speed", 13, Data.INK_MUTED, null, "%s (%.2f)" % [Items.speed_word(item.speed), item.speed], Data.INK)
 	elif item.has("armor"):
-		_line(lines, "%d  Armor" % int(item.armor), 17, Data.CHROME, ui.font_bold)
+		var favored = Items.favored(item)
+		var bonus = favored!="" and favored==g.player.get("class", "")
+		_line(lines, "%d  Armor" % roundi(Items.armor_for(item, g.player.get("class", ""))), 17, Data.CHROME, ui.font_bold, "+15% favored" if bonus else "", Data.UPGRADE)
+		if favored!="":
+			_line(lines, "Favored: %s" % Classes.CLASSES[favored].name, 12, Classes.CLASSES[favored].color, ui.font_bold)
+	for a in item.get("implicit", []):
+		if a is Array and a.size()==2 and Items.AFFIXES.has(a[0]): _line(lines, Items.affix_text(a[0], a[1]), 13, Data.INK)
 	if not item.affixes.is_empty():
 		_divider(lines)
 		for a in item.affixes:

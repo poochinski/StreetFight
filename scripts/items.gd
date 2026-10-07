@@ -8,6 +8,7 @@ extends RefCounted
 ##   rarity    0 Common, 1 Uncommon, 2 Rare, 3 Epic, 4 Legendary
 ##   level     item level, which is also the level needed to equip it
 ##   min/max/speed (weapons) or armor (armor pieces)
+##   implicit  built-in stats of the base, [[stat key, value], ...] (newer armor only)
 ##   affixes   [[stat key, value], ...]; sockets and gems (socketed gem items)
 
 const Data = preload("res://scripts/data.gd")
@@ -27,6 +28,7 @@ const AFFIX_COUNT = [[0, 0], [1, 1], [2, 3], [3, 4], [5, 5]]
 const SOCKET_SLOTS = ["weapon", "helmet", "chest", "amulet"]
 const MATERIALS = ["Rusted", "Iron", "Steel", "Chrome", "Neon"]
 const JEWEL_MATERIALS = ["Copper", "Silver", "Gold", "Chrome", "Prism"]
+const FAVORED_BONUS = 1.15
 const SLOT_WEIGHTS = {"weapon":3.0, "chest":2.0, "helmet":1.5, "gloves":1.2, "boots":1.2, "belt":1.0, "ring":1.0, "amulet":0.8}
 
 const BASES = {
@@ -40,12 +42,69 @@ const BASES = {
 		{"name":"Mace", "style":"mace", "min":16, "max":19, "speed":0.95},
 		{"name":"Katana", "style":"katana", "min":12, "max":19, "speed":1.15},
 	],
-	"helmet": [{"name":"Coif", "style":"coif", "armor":2}, {"name":"Helm", "style":"helm", "armor":3}, {"name":"Visor", "style":"visor", "armor":3}],
-	"chest": [{"name":"Jerkin", "look":"leather", "armor":5}, {"name":"Hauberk", "look":"mail", "armor":7},
-		{"name":"Cuirass", "look":"plate", "armor":8}, {"name":"Mantle", "look":"mantle", "armor":6}],
-	"gloves": [{"name":"Gloves", "style":"gloves", "armor":1}, {"name":"Gauntlets", "style":"gauntlets", "armor":2}],
-	"boots": [{"name":"Boots", "style":"boots", "armor":1}, {"name":"Greaves", "style":"greaves", "armor":2}],
-	"belt": [{"name":"Belt", "style":"belt", "armor":1}, {"name":"Sash", "style":"sash", "armor":1}],
+	# Armor: armor at item level 1, level = lowest item level it drops at,
+	# fav = the class that gets +15% of its armor, stats = built-in stats every
+	# copy carries, colors = main and second color of the worn 3D piece.
+	"helmet": [
+		{"name":"Coif", "style":"coif", "armor":2, "colors":[Color("5f5c66"), Color("8d959a")]},
+		{"name":"Helm", "style":"helm", "armor":3, "fav":"samurai", "colors":[Color("27324c"), Color("9ab0c8")]},
+		{"name":"Visor", "style":"visor", "armor":3, "colors":[Color("3a3d44"), Color("1a1c22")]},
+		{"name":"Sweatband & Shades", "style":"shades", "armor":1, "fav":"gunslinger", "stats":[["crit", 2]], "colors":[Color("f2efe6"), Color("15151a")]},
+		{"name":"Hockey Mask", "style":"hockey", "armor":3, "fav":"samurai", "stats":[["vitality", 3]], "colors":[Color("ece8de"), Color("c0262c")]},
+		{"name":"Walkman Headphones", "style":"headphones", "armor":1, "fav":"synth_mage", "stats":[["mana_regen", 10]], "colors":[Color("ff8a2a"), Color("2a2a32")]},
+		{"name":"Cowboy Hat", "style":"cowboy", "armor":2, "level":4, "fav":"gunslinger", "stats":[["gold_find", 10]], "colors":[Color("7a5030"), Color("2e1e14")]},
+		{"name":"Gas Mask", "style":"gasmask", "armor":3, "level":4, "stats":[["max_hp", 10]], "colors":[Color("26262c"), Color("5f6448")]},
+		{"name":"Hardhat Kabuto", "style":"kabuto", "armor":4, "level":7, "fav":"samurai", "stats":[["armor", 3]], "colors":[Color("f2c21a"), Color("1c1c20")]},
+		{"name":"Holo Visor", "style":"holo", "armor":2, "level":7, "fav":"synth_mage", "stats":[["focus", 3]], "colors":[Color("2c2c3a"), Color("3ff0ff")]},
+		{"name":"Moto Helmet", "style":"moto", "armor":5, "level":10, "stats":[["max_hp", 12]], "colors":[Color("c02838"), Color("101018")]},
+	],
+	"chest": [
+		{"name":"Jerkin", "look":"leather", "style":"jerkin", "armor":5, "colors":[Color("5a3a28"), Color("c0c4cc")]},
+		{"name":"Hauberk", "look":"mail", "style":"hauberk", "armor":7, "colors":[Color("5a6068"), Color("8d98a4")]},
+		{"name":"Cuirass", "look":"plate", "style":"cuirass", "armor":8, "fav":"samurai", "colors":[Color("3a3f4a"), Color("c03030")]},
+		{"name":"Mantle", "look":"mantle", "style":"mantle", "armor":6, "fav":"synth_mage", "colors":[Color("5c3a8a"), Color("f0cf7a")]},
+		{"name":"Studded Denim Vest", "look":"denim", "style":"denim", "armor":5, "fav":"gunslinger", "stats":[["dexterity", 3]], "colors":[Color("5a7fa8"), Color("c8ccd4")]},
+		{"name":"Track Jacket", "look":"track", "style":"track", "armor":4, "stats":[["attack_speed", 3]], "colors":[Color("16a0a0"), Color("ff4fa8")]},
+		{"name":"Varsity Jacket", "look":"varsity", "style":"varsity", "armor":6, "level":4, "stats":[["vitality", 3]], "colors":[Color("7a1f2e"), Color("efe8dc")]},
+		{"name":"Duster Coat", "look":"duster", "style":"duster", "armor":6, "level":4, "fav":"gunslinger", "stats":[["crit", 2]], "colors":[Color("7a5634"), Color("3e2a1a")]},
+		{"name":"Riot Vest", "look":"riot", "style":"riot", "armor":9, "level":7, "fav":"samurai", "stats":[["armor", 3]], "colors":[Color("1e1e24"), Color("44444f")]},
+		{"name":"Synthweave Robe", "look":"robe", "style":"robe", "armor":5, "level":7, "fav":"synth_mage", "stats":[["focus", 3], ["mana_regen", 10]], "colors":[Color("5a2a8a"), Color("ff4fd8")]},
+		{"name":"Tire-Tread O-Yoroi", "look":"oyoroi", "style":"oyoroi", "armor":11, "level":10, "fav":"samurai", "stats":[["strength", 3]], "colors":[Color("1c1c1e"), Color("e0b020")]},
+		{"name":"Neon Trench", "look":"trench", "style":"trench", "armor":7, "level":13, "fav":"synth_mage", "stats":[["nova_damage", 12]], "colors":[Color("141418"), Color("ff4fd8")]},
+	],
+	"gloves": [
+		{"name":"Gloves", "style":"gloves", "armor":1, "colors":[Color("6b4a32"), Color("4a3222")]},
+		{"name":"Gauntlets", "style":"gauntlets", "armor":2, "fav":"samurai", "colors":[Color("8d959a"), Color("4a4e58")]},
+		{"name":"Fingerless Driving Gloves", "style":"driving", "armor":1, "fav":"gunslinger", "stats":[["attack_speed", 3]], "colors":[Color("1c1c20"), Color("8a8e98")]},
+		{"name":"Hand Wraps", "style":"wraps", "armor":1, "fav":"samurai", "stats":[["strength", 3]], "colors":[Color("eeeae2"), Color("bdb5a5")]},
+		{"name":"Wired Gloves", "style":"wired", "armor":1, "level":4, "fav":"synth_mage", "stats":[["shock", 3]], "colors":[Color("18181e"), Color("3ff0ff")]},
+		{"name":"Motocross Gloves", "style":"motocross", "armor":2, "level":4, "stats":[["dexterity", 3]], "colors":[Color("d02a2a"), Color("f2f2f2")]},
+		{"name":"Insulated Gloves", "style":"insulated", "armor":2, "level":7, "fav":"synth_mage", "stats":[["focus", 3]], "colors":[Color("ff7a1a"), Color("b85410")]},
+		{"name":"Welding Gauntlets", "style":"welding", "armor":3, "level":7, "fav":"samurai", "stats":[["fire", 3]], "colors":[Color("c8a070"), Color("3a2a1a")]},
+		{"name":"Kote Sleeves", "style":"kote", "armor":3, "level":10, "fav":"samurai", "stats":[["armor", 3]], "colors":[Color("2a2a44"), Color("9aa2aa")]},
+	],
+	"boots": [
+		{"name":"Boots", "style":"boots", "armor":1, "colors":[Color("6b4a32"), Color("2a1c14")]},
+		{"name":"Greaves", "style":"greaves", "armor":2, "fav":"samurai", "colors":[Color("3a3036"), Color("d02a2a")]},
+		{"name":"High-Top Sneakers", "style":"hightops", "armor":1, "fav":"gunslinger", "stats":[["move_speed", 3]], "colors":[Color("f2f2ee"), Color("ff4fa8")]},
+		{"name":"Tabi Boots", "style":"tabi", "armor":1, "fav":"samurai", "stats":[["dexterity", 3]], "colors":[Color("1a1a1e"), Color("d8d0c0")]},
+		{"name":"Cowboy Boots", "style":"cowboyboots", "armor":2, "level":4, "fav":"gunslinger", "stats":[["crit", 2]], "colors":[Color("7a4a28"), Color("c8a050")]},
+		{"name":"Moon Boots", "style":"moon", "armor":2, "level":4, "fav":"synth_mage", "stats":[["mana_regen", 10]], "colors":[Color("c8ccd8"), Color("6a6e80")]},
+		{"name":"Steel-Toe Work Boots", "style":"worktoe", "armor":3, "level":7, "stats":[["armor", 3]], "colors":[Color("b08850"), Color("3a2a1a")]},
+		{"name":"Roller Skates", "style":"skates", "armor":1, "level":7, "stats":[["move_speed", 6]], "colors":[Color("f2f0ea"), Color("ff4fd8")]},
+		{"name":"Moto Boots", "style":"motoboots", "armor":3, "level":10, "fav":"samurai", "stats":[["vitality", 3]], "colors":[Color("1c1c22"), Color("8a8e98")]},
+		{"name":"Neon-Sole Kicks", "style":"neonkicks", "armor":2, "level":13, "fav":"synth_mage", "stats":[["focus", 3], ["move_speed", 3]], "colors":[Color("18181e"), Color("3ff0ff")]},
+	],
+	"belt": [
+		{"name":"Belt", "style":"belt", "armor":1, "colors":[Color("6b4a32"), Color("c8a050")]},
+		{"name":"Sash", "style":"sash", "armor":1, "colors":[Color("6c3a9a"), Color("f0cf7a")]},
+		{"name":"Studded Obi", "style":"obi", "armor":2, "fav":"samurai", "stats":[["strength", 3]], "colors":[Color("18181c"), Color("b8bec6")]},
+		{"name":"Ammo Bandolier", "style":"bandolier", "armor":1, "fav":"gunslinger", "stats":[["attack_speed", 3]], "colors":[Color("5a4030"), Color("d8a840")]},
+		{"name":"Fanny Pack", "style":"fanny", "armor":1, "level":4, "stats":[["gold_find", 10]], "colors":[Color("ff4fa8"), Color("16a0a0")]},
+		{"name":"Tool Belt", "style":"toolbelt", "armor":2, "level":4, "stats":[["armor", 3]], "colors":[Color("8a6a40"), Color("9aa2aa")]},
+		{"name":"Cassette Belt", "style":"cassette", "armor":1, "level":7, "fav":"synth_mage", "stats":[["mana_regen", 10]], "colors":[Color("18181c"), Color("e8e4dc")]},
+		{"name":"Weightlifting Belt", "style":"lifting", "armor":3, "level":10, "fav":"samurai", "stats":[["vitality", 3], ["max_hp", 10]], "colors":[Color("4a2e1c"), Color("b8bec6")]},
+	],
 	"ring": [{"name":"Ring", "style":"ring"}, {"name":"Band", "style":"band"}],
 	"amulet": [{"name":"Amulet", "style":"amulet"}, {"name":"Talisman", "style":"talisman"}],
 }
@@ -132,6 +191,30 @@ static func fits(item, slot: String) -> bool:
 	if item==null: return true
 	if item.slot=="ring": return slot in ["ring1", "ring2"]
 	return item.slot==slot
+
+## The base an item was made from (its BASES entry), or {} for gems and
+## unknown names. Old saves keep working: every base name ever used is still listed.
+static func base_info(item) -> Dictionary:
+	if item==null or not BASES.has(item.get("slot", "")): return {}
+	for base in BASES[item.slot]:
+		if base.name==item.get("base", ""): return base
+	return {}
+
+## The class that gets +15% of this item's armor, or "".
+static func favored(item) -> String:
+	return base_info(item).get("fav", "")
+
+## The built-in stats every copy of a base carries, at an item level.
+static func implicit_stats(base: Dictionary, level: int) -> Array:
+	var result: Array = []
+	for stat in base.get("stats", []):
+		result.append([stat[0], maxi(1, roundi(stat[1]*(1+(level-1)*0.08)))])
+	return result
+
+## The armor an item gives a hero of a class: favored gear adds 15%.
+static func armor_for(item, class_id: String) -> float:
+	var armor = float(item.get("armor", 0))
+	return armor*FAVORED_BONUS if class_id!="" and favored(item)==class_id else armor
 
 static func color(item) -> Color:
 	return Data.RARITY_COLORS[clampi(int(item.rarity), 0, 4)]
@@ -250,7 +333,9 @@ static func _pick_slot(g) -> String:
 static func generate(g, level: int, rarity: int, slot: String = "") -> Dictionary:
 	if slot=="": slot = _pick_slot(g)
 	level = maxi(1, level)
-	var base: Dictionary = _pick(g, BASES[slot])
+	# Each base only drops from its level band on.
+	var bases = BASES[slot].filter(func(b): return int(b.get("level", 1))<=level)
+	var base: Dictionary = _pick(g, bases)
 	var tier = clampi((level-1)/3, 0, 4)
 	var item = {"slot":slot, "base":base.name, "rarity":rarity, "level":level, "affixes":[], "sockets":0, "gems":[], "flavor":""}
 	if base.has("style"): item.style = base.style
@@ -262,6 +347,7 @@ static func generate(g, level: int, rarity: int, slot: String = "") -> Dictionar
 		item.speed = base.speed
 	elif base.has("armor"):
 		item.armor = roundi(base.armor*(1+(level-1)*0.18)*RARITY_POWER[rarity])
+		if base.has("stats"): item.implicit = implicit_stats(base, level)
 	var range_count: Array = AFFIX_COUNT[rarity]
 	var count = range_count[0]+floori(g._random()*(range_count[1]-range_count[0]+1))
 	var pool: Array = []
@@ -306,14 +392,16 @@ static func random_drop(g, luck: float = 1.0) -> Dictionary:
 
 # --- Hero stats -------------------------------------------------------------------
 
-static func gear_totals(equipment: Dictionary) -> Dictionary:
+static func gear_totals(equipment: Dictionary, class_id: String = "") -> Dictionary:
 	var totals = {"armor_base":0.0}
 	for key in AFFIXES: totals[key] = 0.0
 	for slot in EQUIP_SLOTS:
 		var item = equipment.get(slot)
 		if item==null: continue
-		if item.has("armor"): totals.armor_base += item.armor
+		if item.has("armor"): totals.armor_base += armor_for(item, class_id)
 		for a in item.affixes: totals[a[0]] += a[1]
+		for a in item.get("implicit", []):
+			if a is Array and a.size()==2 and totals.has(a[0]): totals[a[0]] += float(a[1])
 		for gem in item.gems:
 			var effect = gem_effect(gem, slot=="weapon")
 			totals[effect[0]] += effect[1]
@@ -321,7 +409,7 @@ static func gear_totals(equipment: Dictionary) -> Dictionary:
 
 ## Everything the hero's attributes, level and gear add up to.
 static func derive(player: Dictionary) -> Dictionary:
-	var totals = gear_totals(player.equipment)
+	var totals = gear_totals(player.equipment, player.get("class", ""))
 	var d = {}
 	for key in ATTRIBUTES:
 		d[key+"_base"] = float(player.attributes[key])
@@ -359,6 +447,8 @@ static func score(item) -> float:
 	if item==null: return 0.0
 	var total = dps(item)*0.6+float(item.get("armor", 0))*1.5
 	for a in item.affixes: total += a[1]*AFFIXES[a[0]].weight
+	for a in item.get("implicit", []):
+		if a is Array and a.size()==2 and AFFIXES.has(a[0]): total += float(a[1])*AFFIXES[a[0]].weight
 	for gem in item.gems:
 		var effect = gem_effect(gem, item.slot=="weapon")
 		total += effect[1]*AFFIXES[effect[0]].weight

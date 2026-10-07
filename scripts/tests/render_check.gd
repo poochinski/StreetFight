@@ -96,6 +96,11 @@ static func run(g) -> void:
 				push_error("3D projection round trip failed: %s -> %s" % [point,back])
 				g.get_tree().quit(1)
 				return
+		# The hero wears its equipped gear: the starter chest builds 3D parts.
+		if g.view3d.hero==null or g.view3d.hero.get_meta("gear_nodes", []).is_empty():
+			push_error("The 3D hero is not wearing its equipped gear")
+			g.get_tree().quit(1)
+			return
 	# An elite pack: a rare leader with minions, and a champion.
 	var pack: Array = []
 	for k in 3: pack.append(g._spawn_enemy("brute" if k==0 else "imp",g.player.pos+Vector2(2.2+k*0.7,-1.6+k*0.8)))

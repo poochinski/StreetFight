@@ -6,6 +6,8 @@ extends RefCounted
 
 const ROOT = "res://assets/models/"
 const CombatAnimator=preload("res://scripts/combat_animator.gd")
+const GearModels = preload("res://scripts/gear_models.gd")
+const Items = preload("res://scripts/items.gd")
 ## KayKit characters stand about 2.2 units tall; a grid cell is one unit and a
 ## shop door is 1.2 units high.
 const HERO_SCALE = 0.46
@@ -18,7 +20,7 @@ const HEROES = {
 	"samurai": {"model":"Knight", "keep":["2H_Sword"], "idle":"2H_Melee_Idle",
 		"attacks":["2H_Melee_Attack_Slice", "2H_Melee_Attack_Chop", "2H_Melee_Attack_Spin"],
 		"shoot":"2H_Melee_Attack_Slice", "cast":"2H_Melee_Attack_Spin", "channel":"2H_Melee_Attack_Spinning"},
-	"gunslinger": {"model":"Rogue_Hooded", "keep":["1H_Crossbow"], "idle":"1H_Ranged_Aiming",
+	"gunslinger": {"model":"Rogue", "keep":["1H_Crossbow"], "idle":"1H_Ranged_Aiming",
 		"attacks":["1H_Ranged_Shoot"], "shoot":"1H_Ranged_Shoot", "cast":"Throw", "channel":"1H_Ranged_Shooting"},
 	"synth_mage": {"model":"Mage", "keep":["2H_Staff"], "idle":"Idle",
 		"attacks":["Spellcast_Shoot"], "shoot":"Spellcast_Shoot", "cast":"Spellcast_Long", "channel":"Spellcasting"},
@@ -38,6 +40,8 @@ const SCREEN_COLORS = [Color("3ff0ff"), Color("ff4fd8"), Color("5dff8f"), Color(
 
 var scenes = {}
 var materials = {}
+## Builds and caches the armor the heroes wear.
+var gear = GearModels.new()
 
 func _scene(path: String) -> Node3D:
 	if not scenes.has(path):
@@ -112,7 +116,9 @@ func hero(class_id: String) -> Node3D:
 			if hand_item: item.visible = false
 	actor.set_meta("class", class_id)
 	CombatAnimator.setup(actor)
-	CombatAnimator.equip(actor,preload("res://scripts/items.gd").starter_weapon())
+	CombatAnimator.equip(actor,Items.starter_weapon())
+	# Plain clothes and the starting jacket until the hero's own gear is known.
+	gear.dress(actor, {"chest":Items.starter_chest()})
 	return actor
 
 ## Starts the idle loop; call once the actor is in the scene tree.
@@ -154,6 +160,8 @@ func enemy(kind: String) -> Node3D:
 	return actor
 
 func pose_hero(actor: Node3D, g, dt: float) -> void:
+	gear.dress(actor, g.player.equipment)
+	gear.pulse(actor, g.clock)
 	if actor.has_meta("combat_skeleton"):
 		CombatAnimator.pose(actor,g,dt,self)
 		return

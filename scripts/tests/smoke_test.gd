@@ -11,6 +11,7 @@ const SaveGame = preload("res://scripts/save_game.gd")
 const Classes = preload("res://scripts/classes.gd")
 const Elites = preload("res://scripts/elites.gd")
 const Data = preload("res://scripts/data.gd")
+const GearModels = preload("res://scripts/gear_models.gd")
 
 static func run(g) -> void:
 	var failures: Array[String] = []
@@ -43,7 +44,7 @@ static func run(g) -> void:
 		check.call(music is AudioStreamWAV and music.loop_mode==AudioStreamWAV.LOOP_FORWARD and music.get_length()>10,"The %s music loads and loops" % track)
 	check.call(not g.synth.enabled and g.synth.track!="","Sound stays off during tests and a floor picks its music")
 	if failures.is_empty():
-		print("PASS: 60 connected city floors with wide streets, an open subway entrance, a quiet start and props that never wall anything off; equal eight-way speed; 15/30/60/144 FPS motion; braking/reversal; swept collision and sliding; visible-body aim; timed damage; buffered combo/finisher; no double hits; dodge cancellation; enemy line of sight, pathfinding, wind-ups and spacing; walled nova and mana; three classes, their skills and unlock levels; click-to-move and chase; leveling pace; progression; stat points; item generation; equip, swap, sockets, salvage, sort; elemental effects; loot pickup; saves; menus; audio and looping music.")
+		print("PASS: 60 connected city floors with wide streets, an open subway entrance, a quiet start and props that never wall anything off; equal eight-way speed; 15/30/60/144 FPS motion; braking/reversal; swept collision and sliding; visible-body aim; timed damage; buffered combo/finisher; no double hits; dodge cancellation; enemy line of sight, pathfinding, wind-ups and spacing; walled nova and mana; three classes, their skills and unlock levels; click-to-move and chase; leveling pace; progression; stat points; item generation; 50 armor bases with favored classes, built-in stats, 3D looks and old saves; equip, swap, sockets, salvage, sort; elemental effects; loot pickup; saves; menus; audio and looping music.")
 	else: print("FAIL: ",failures)
 	g.get_tree().quit(0 if failures.is_empty() else 1)
 
@@ -524,6 +525,7 @@ static func _items(g, check: Callable) -> void:
 	check.call(Items.upgrade_steps(strong,g.player.equipment)>0,"A stronger weapon shows as an upgrade")
 	weak.min = 2; weak.max = 3
 	check.call(Items.upgrade_steps(weak,g.player.equipment)<0,"A weaker weapon shows as a downgrade")
+	_armor_bases(g,check)
 	var rarities = [0,0,0,0,0]
 	for i in 3000: rarities[Items.roll_rarity(g)] += 1
 	check.call(rarities[0]>rarities[1] and rarities[1]>rarities[2] and rarities[2]>rarities[3] and rarities[3]>rarities[4] and rarities[4]>0,"Rarer tiers drop less often")
@@ -555,6 +557,77 @@ static func _items(g, check: Callable) -> void:
 	g.player.mana = 0; g.player.nova = 0
 	g._nova()
 	check.call(g.player.nova==0,"Nova needs mana")
+
+## The armor catalog: every base drops (only from its level band on), carries
+## its built-in stats and builds a 3D piece; favored gear gives its class +15%
+## armor and says so; items saved under the old bases still load and display.
+static func _armor_bases(g, check: Callable) -> void:
+	var gear = GearModels.new()
+	var seen = {}
+	var early = true
+	var built = true
+	var implicit_ok = true
+	for slot in Items.ARMOR_SLOTS:
+		for level in [1,3,4,6,7,9,10,12,13]:
+			for i in 160:
+				var item = Items.generate(g,level,i%5,slot)
+				var base = Items.base_info(item)
+				seen[item.base] = true
+				if base.is_empty() or int(base.get("level",1))>level: early = false
+				if item.get("implicit",[]).size()!=base.get("stats",[]).size() or not SaveGame._valid_item(item): implicit_ok = false
+	for slot in Items.ARMOR_SLOTS:
+		for base in Items.BASES[slot]:
+			check.call(seen.has(base.name),"Armor base %s drops" % base.name)
+			for rarity in 5:
+				var item = {"slot":slot,"base":base.name,"rarity":rarity,"level":maxi(int(base.get("level",1)),rarity*3+1),"sockets":2 if slot in Items.SOCKET_SLOTS else 0,"gems":[Items.make_gem("ruby",1)] if slot in Items.SOCKET_SLOTS else [],"affixes":[]}
+				var parts = gear.parts(item)
+				var count = 0
+				for bone in parts.groups:
+					count += parts.groups[bone].get_child_count()
+					parts.groups[bone].free()
+				if count<3: built = false
+	check.call(early,"Armor bases only drop from their level band on")
+	check.call(implicit_ok,"Armor bases carry their built-in stats and validate")
+	check.call(built,"Every armor base builds a 3D piece at every rarity")
+	check.call(Items.BASES.helmet.size()==11 and Items.BASES.chest.size()==12 and Items.BASES.gloves.size()==9 and Items.BASES.boots.size()==10 and Items.BASES.belt.size()==8,"The catalog's 50 armor bases are listed")
+	# Favored: +15% of the base armor for the favored class only.
+	var helm = {"slot":"helmet","base":"Hockey Mask","style":"hockey","rarity":0,"level":1,"armor":20,"affixes":[],"sockets":0,"gems":[],"implicit":[["vitality",3]],"name":"Rusted Hockey Mask","value":5,"flavor":""}
+	var hero = {"class":"samurai","level":1,"attributes":{"strength":5,"dexterity":5,"focus":5,"vitality":5},"equipment":Items.empty_equipment()}
+	hero.equipment.helmet = helm
+	var samurai = Items.derive(hero)
+	hero["class"] = "gunslinger"
+	var gunslinger = Items.derive(hero)
+	check.call(is_equal_approx(samurai.armor,23.0) and is_equal_approx(gunslinger.armor,20.0),"Favored gear gives its class 15% more armor")
+	check.call(samurai.vitality==8.0,"Built-in stats add to the hero")
+	var favored_line = g.hud_view.inventory_view.tooltip_lines(helm,"bag").any(func(l): return l.get("text","")=="Favored: Street Samurai" and l.get("color")==Classes.CLASSES.samurai.color)
+	check.call(favored_line,"Tooltips show the favored class in its color")
+	# A checkpoint written before the new bases: old names, no built-in stats.
+	var old_items = [
+		{"slot":"helmet","base":"Visor","style":"visor","name":"Keen Visor of Precision","rarity":2,"level":3,"armor":5,"affixes":[["crit",3],["armor",4]],"sockets":1,"gems":[],"value":30,"flavor":""},
+		{"slot":"chest","base":"Jerkin","look":"leather","name":"Worn Leather","rarity":0,"level":1,"armor":3,"affixes":[],"sockets":0,"gems":[],"value":3,"flavor":""},
+		{"slot":"gloves","base":"Gauntlets","style":"gauntlets","name":"Iron Gauntlets","rarity":0,"level":4,"armor":3,"affixes":[],"sockets":0,"gems":[],"value":20,"flavor":""},
+		{"slot":"boots","base":"Greaves","style":"greaves","name":"Swift Greaves","rarity":1,"level":2,"armor":2,"affixes":[["move_speed",4]],"sockets":0,"gems":[],"value":12,"flavor":""},
+		{"slot":"belt","base":"Sash","style":"sash","name":"Cassette Girdle","rarity":4,"level":5,"armor":3,"affixes":[["focus",4]],"sockets":0,"gems":[],"value":90,"flavor":"Side B is all battle hymns."}]
+	var old_hero = g._new_player("samurai")
+	for item in old_items: old_hero.equipment[item.slot] = item.duplicate(true)
+	old_hero.bag[0] = old_items[0].duplicate(true)
+	var path = "user://smoke-old-gear.json"
+	SaveGame.write(path,old_hero,1,0,0.0,1)
+	var data = SaveGame.read(path)
+	SaveGame.erase(path)
+	var loads = not data.is_empty()
+	var shows = loads
+	if loads:
+		for slot in Items.ARMOR_SLOTS:
+			var item = data.stats.equipment[slot]
+			if Items.base_info(item).is_empty() or g.hud_view.inventory_view.tooltip_lines(item,"equipped").is_empty(): shows = false
+			var parts = gear.parts(item)
+			if parts.groups.is_empty(): shows = false
+			for bone in parts.groups: parts.groups[bone].free()
+		old_hero.equipment = data.stats.equipment
+		shows = shows and Items.derive(old_hero).armor>0
+	check.call(loads,"Checkpoints with the old armor names still load")
+	check.call(shows,"Old armor still shows its tooltip, stats and 3D piece")
 
 static func _inventory(g, check: Callable, finished: Array) -> void:
 	g._begin()

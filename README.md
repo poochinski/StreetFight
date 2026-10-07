@@ -99,17 +99,19 @@ The screen follows a classic action RPG layout:
 - **Five tiers:** Common (white), Uncommon (green), Rare (blue), Epic (purple) and Legendary (gold). The color marks the item everywhere: name plate, slot frame, tooltip and the beam of light over it on the ground.
 - **On the ground:** items fly out of enemies and chests and land under a beam of light that grows taller and brighter with rarity; Epic and Legendary items add a turning ring and rising sparks. Every drop has a readable name plate, and plates stack so they never overlap. A green arrow on a plate marks an upgrade and a red arrow a downgrade. Hover a plate for the full tooltip and comparison; click it to walk over and pick it up. Walking over loot also picks it up, and items you drop yourself stay put.
 - **Gear:** eight weapon types (short sword, cleaver, leafblade, saber, greatsword, axe, mace, katana), each with its own damage range and attack speed, plus helmets, chest armor, gloves, boots, belts, rings and amulets. Item level sets the power and the level needed to equip it.
+- **Armor bases:** 50 of them (11 helmets, 12 chest pieces, 9 gloves, 10 boots, 8 belts), from Hockey Mask and Varsity Jacket to Tire-Tread O-Yoroi and Neon Trench. Better bases only drop from their item level on, and each has a built-in stat that grows with item level, shown above the affixes. Many bases favor one class: that class gets 15% more base armor from them, and the tooltip shows "Favored: <class>" in the class color. Items from older checkpoints keep their old base names and still load.
 - **Affixes:** stats, health, armor, fire, ice, shock and poison damage, attack speed, critical chance and damage, gold found, health per kill, mana regeneration, nova damage and movement speed. Names come from the affixes (for example "Keen Katana of Static"); Epic items get two-word names and Legendary items are named uniques with flavor text.
 - **Elements:** fire burns over time, poison sickens over time, ice chills and halves enemy speed, and shock can arc to a nearby enemy. A weapon's glow, swing trail and sparks take the color of its strongest element.
 - **Gems:** Ruby, Sapphire, Emerald, Amethyst and Topaz in Chipped, Polished and Radiant grades. Each gives one bonus in a weapon and another in armor or jewelry.
 - **Stats:** each level gives 5 stat points and 20 health. Strength raises weapon and critical damage, Dexterity raises critical and evade chance, Focus raises Ember Nova damage and mana, and Vitality raises health. Armor reduces damage taken. Ember Nova costs 25 mana.
-- **The hero's look follows the gear:** helmets (chain coif, plumed helm or a chrome visor with a neon slit), body armor colors, gloves, boots, belt and the equipped weapon. With no helmet the hero wears a neon headband.
+- **What you wear is what you see:** in 3D, every equipped armor piece is built onto the hero's skeleton from simple shapes (`scripts/gear_models.gd`), and the character page portrait shows it too. Rarity adds trim, studs and glow (Epic pulses, Legendary also casts light), and the item's tier tints the metal. With nothing in a slot the hero wears plain class-colored clothes, and a Coif puts the Rogue's hood back on the Gunslinger. In the 2D view helmets, body armor colors, gloves, boots, belt and the weapon are drawn on the hero.
+- **Gear gallery:** `godot --path . --rendering-driver opengl3 -- --gear-gallery` renders every armor base at every rarity, a contact sheet per slot and full sets worn by each class into `previews/gear/` (add `--only=helmet|chest|gloves|boots|belt|worn` for one part).
 
 ## 3D view
 
 - `scripts/world3d.gd` builds the level in 3D from the same generated map: streets, sidewalks, shop floors, buildings with lit storefronts and windows, neon signs with real light, street markings, props and the subway entrance. A night environment adds moonlight shadows, fog and glow. The camera looks down the same diagonal as the original 2D view, so movement keys and click-to-move behave the same.
 - `scripts/models.gd` places the 3D models and picks their animations from the game state: idle, run, combo attacks, shooting, spellcasting, whirlwind, dodge, hit reactions and deaths. Enemy attacks are timed so the blow lands when the wind-up ends.
-- Classes: the Street Samurai is the Knight with a greatsword, the Gunslinger the hooded Rogue with a crossbow, and the Synth Mage the Mage with a staff. Enemies: imps are skeleton minions with blades, brutes skeleton warriors with axe and shield, casters skeleton mages, and the Ash Warden a giant skeleton warrior with burning eyes.
+- Classes: the Street Samurai is the Knight with a greatsword, the Gunslinger the Rogue with a crossbow (the hood is now the Coif look, so other helmets can replace it), and the Synth Mage the Mage with a staff. Enemies: imps are skeleton minions with blades, brutes skeleton warriors with axe and shield, casters skeleton mages, and the Ash Warden a giant skeleton warrior with burning eyes.
 - City props (cars, streetlights, traffic lights, hydrants, dumpsters, benches, crates, trash, rooftop water towers) are KayKit models; the rest are built from simple shapes.
 - 3D models are by Kay Lousberg (KayKit), CC0 public domain; see `assets/models/CREDITS.txt`.
 - Run with `-- --2d` to use the original 2D art instead. The smoke test always runs on the 2D path.
@@ -156,6 +158,7 @@ The game saves at the beginning of each floor to Godot's local user-data folder 
 - `scripts/enemy_ai.gd`: enemy awareness, pathfinding, telegraphed attacks and body spacing.
 - `scripts/world3d.gd`: the 3D view: camera, lighting, the city meshes, signs, props, and projection between the map, the 3D scene and the screen.
 - `scripts/models.gd`: 3D heroes, enemies and props, and their animations.
+- `scripts/gear_models.gd`: builds equipped armor onto the 3D heroes from primitive meshes, with rarity trim, tier tints and cached meshes and materials.
 - `assets/models/`: KayKit 3D models (characters, weapons, city props) and their credits.
 - `scripts/world_view.gd`: draw order of the city, characters and effects, the weather and the darkness around the hero.
 - `scripts/city_art.gd`: streets, sidewalks and shop floors, building fronts, neon signs, ground markings, light pools, every prop and the subway entrance.
@@ -174,16 +177,16 @@ The game saves at the beginning of each floor to Godot's local user-data folder 
 - `assets/audio/`: the synthwave music loops.
 - `tools/synthwave.py`: renders the music loops.
 - `scripts/save_game.gd`: floor checkpoints.
-- `scripts/tests/`: the smoke test and preview renderer.
+- `scripts/tests/`: the smoke test, the preview renderer and the gear gallery (`gear_gallery.gd`).
 - `archive/3d-prototype/`: the earlier 3D experiment, kept for reference. Godot ignores this folder.
 - `icon.svg`: original project icon.
 - `previews/`: rendered previews of the actual native game, including title, gameplay, the subway entrance, each floor, a zoomed-out view of each district (district1-3), loot, the character and equipment pages, tooltips, combat and pause.
 
-This is still a prototype. Equipped gear does not yet change the 3D hero's look. A town hub, vendors, pets, skill trees, campaign quests, multiplayer, and a standalone exported build are not included yet. The interface uses the Bahnschrift and Georgia fonts that come with Windows, with local fallbacks.
+This is still a prototype. A town hub, vendors, pets, skill trees, campaign quests, multiplayer, and a standalone exported build are not included yet. The interface uses the Bahnschrift and Georgia fonts that come with Windows, with local fallbacks.
 
 ## Validation
 
-The project was tested with Godot 4.7.2. Native checks cover 60 generated city floors (every street at least six cells wide, every cell reachable, props never walling anything off, an open subway entrance, no enemies at the start, neon signs on the buildings), equal speed in eight directions, motion at 15/30/60/144 FPS, stopping and reversing, swept wall collision, wall sliding, body-target aiming, swing timing, queued combos, finisher damage, held attacks, single hits per swing, dodge cancellation, obstruction checks, enemy line of sight, pathfinding, wind-ups and spacing, walled Ember Nova and its mana cost, every class's basic attack and four skills (locked until their level, then hitting and going on cooldown), click-to-move around walls and click-to-chase, the leveling pace, progression and stat points, item generation, equipping, swapping, sockets, salvage, sorting, dropping and picking up loot, elemental effects, saves, menus, synthesized sound waveforms, and that both music tracks load and loop:
+The project was tested with Godot 4.7.2. Native checks cover 60 generated city floors (every street at least six cells wide, every cell reachable, props never walling anything off, an open subway entrance, no enemies at the start, neon signs on the buildings), equal speed in eight directions, motion at 15/30/60/144 FPS, stopping and reversing, swept wall collision, wall sliding, body-target aiming, swing timing, queued combos, finisher damage, held attacks, single hits per swing, dodge cancellation, obstruction checks, enemy line of sight, pathfinding, wind-ups and spacing, walled Ember Nova and its mana cost, every class's basic attack and four skills (locked until their level, then hitting and going on cooldown), click-to-move around walls and click-to-chase, the leveling pace, progression and stat points, item generation, the 50 armor bases (drop levels, built-in stats, favored armor and tooltip, a 3D look at every rarity, older checkpoint items), equipping, swapping, sockets, salvage, sorting, dropping and picking up loot, elemental effects, saves, menus, synthesized sound waveforms, and that both music tracks load and loop:
 
 `godot --headless --path . -- --smoke-test`
 

@@ -39,6 +39,7 @@ const ItemArt = preload("res://scripts/item_art.gd")
 const LootView = preload("res://scripts/loot_view.gd")
 const SmokeTest = preload("res://scripts/tests/smoke_test.gd")
 const RenderCheck = preload("res://scripts/tests/render_check.gd")
+const GearGallery = preload("res://scripts/tests/gear_gallery.gd")
 const Classes = preload("res://scripts/classes.gd")
 const Elites = preload("res://scripts/elites.gd")
 const View3D = preload("res://scripts/world3d.gd")
@@ -166,7 +167,7 @@ func _ready() -> void:
 	synth = Synth.new()
 	add_child(synth)
 	var args = OS.get_cmdline_user_args()
-	testing = "--smoke-test" in args or "--render-check" in args
+	testing = "--smoke-test" in args or "--render-check" in args or "--gear-gallery" in args
 	if testing: save_file = "user://faithful-port-test.json"
 	synth.enabled = not testing
 	if not "--smoke-test" in args and not "--2d" in args:
@@ -179,6 +180,7 @@ func _ready() -> void:
 	cached_save = _load_save()
 	if "--smoke-test" in args: SmokeTest.run.call_deferred(self)
 	if "--render-check" in args: RenderCheck.run.call_deferred(self)
+	if "--gear-gallery" in args: GearGallery.run.call_deferred(self)
 
 # --- Randomness -------------------------------------------------------------
 

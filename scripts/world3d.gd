@@ -425,7 +425,9 @@ var portraits = {}
 func draw_portrait(canvas: CanvasItem, class_id: String, feet: Vector2, height: float) -> void:
 	if not portraits.has(class_id): _make_portrait(class_id)
 	var p = portraits[class_id]
-	if g.player.get("class","")==class_id: Models.CombatAnimator.equip(p.actor,g._weapon())
+	if g.player.get("class","")==class_id:
+		Models.CombatAnimator.equip(p.actor,g._weapon())
+		models.gear.dress(p.actor,g.player.equipment)
 	p.used = g.clock
 	p.viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	# The portrait camera frames the hero's feet at 90% of the image height

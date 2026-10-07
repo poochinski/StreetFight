@@ -62,6 +62,14 @@ const ARMOR_LOOKS = {
 	"mail": {"plate":Color("8794a0"),"shade":Color("596570"),"trim":Color("8fd0e6"),"cloak":Color("27506a")},
 	"plate": {"plate":Color("a7aebb"),"shade":Color("6a7180"),"trim":Color("f0cf7a"),"cloak":Color("5a2147")},
 	"mantle": {"plate":Color("6c5a92"),"shade":Color("45396a"),"trim":Color("f0cf7a"),"cloak":Color("2c2550")},
+	"denim": {"plate":Color("5a7fa8"),"shade":Color("3e5a7c"),"trim":Color("c8ccd4"),"cloak":Color("2a3a52")},
+	"track": {"plate":Color("16a0a0"),"shade":Color("0e6e70"),"trim":Color("ff4fa8"),"cloak":Color("1a3a48")},
+	"varsity": {"plate":Color("7a1f2e"),"shade":Color("54141f"),"trim":Color("efe8dc"),"cloak":Color("3a1018")},
+	"duster": {"plate":Color("7a5634"),"shade":Color("54391f"),"trim":Color("c8a050"),"cloak":Color("5a3e24")},
+	"riot": {"plate":Color("2a2a32"),"shade":Color("18181e"),"trim":Color("9aa2aa"),"cloak":Color("202028")},
+	"robe": {"plate":Color("5a2a8a"),"shade":Color("3c1a60"),"trim":Color("ff4fd8"),"cloak":Color("2c1648")},
+	"oyoroi": {"plate":Color("26262a"),"shade":Color("151517"),"trim":Color("e0b020"),"cloak":Color("5a1a1a")},
+	"trench": {"plate":Color("1c1c22"),"shade":Color("0e0e12"),"trim":Color("ff4fd8"),"cloak":Color("141418")},
 }
 
 ## Per-floor look of the ruined city: ground, building palettes, light and
