@@ -29,7 +29,16 @@ static func run(g) -> void:
 	_click_to_move(g,check)
 	_elites(g,check)
 	_zones(g,check)
+	_save_features(g,check)
 	g._begin()
+	g._activate("toggle_quests")
+	check.call(g.state=="inventory" and g.panels.quests, "Quest button opens a paused quest panel")
+	g._activate("toggle_companion")
+	check.call(g.panels.companion and not g.panels.quests, "Companion button switches from quests")
+	g._activate("toggle_character")
+	check.call(g.panels.character and not g.panels.companion, "Character button leaves companion panel")
+	g._close_panels()
+	check.call(g.state=="play" and not g.panels.values().has(true), "Closing panels resumes play")
 	_items(g,check)
 	var finished: Array = []
 	_inventory(g,check,finished)
@@ -105,7 +114,13 @@ static func _zones(g, check: Callable) -> void:
 		var reach = _reach(g,g.player.pos)
 		var doors = g.exits.filter(func(e): return e.kind=="door")
 		check.call(doors.size()==Zones.DOORS[level].size(),"Street %d has a doorway for each side area" % level)
-		for d in doors: check.call(reach.has(Vector2i(d.pos)) and not g.cells.has(Vector2i(d.wall)),"Doorways stand on the sidewalk in a building front")
+		for d in doors:
+			check.call(reach.has(Vector2i(d.pos)), "Every entrance is reachable")
+			if d.get("landmark", false):
+				check.call(g.cell_style.get(Vector2i(d.pos), "") in ["pavers", "dirt"], "Landmark entrance has an open approach")
+			else: check.call(not g.cells.has(Vector2i(d.wall)), "Ordinary doorway sits in a building front")
+		for e in g.exits:
+			if e.kind=="subway": check.call(g.cells.get(Vector2i(e.pos), 0)==3, "Subway entrance sits on the sidewalk")
 		check.call(g.exits.any(func(e): return e.kind=="subway" and e.to[2]=="west")==(level<3),"Streets before the last have a subway entrance")
 		check.call(g.exits.any(func(e): return e.kind=="subway" and e.to[2]=="east")==(level>1),"Later streets have stairs back down to the last station")
 		for e in g.enemies:
@@ -319,8 +334,9 @@ static func _combat(g, check: Callable) -> void:
 	check.call(g.player.level==2 and g.player.max_hp==140 and g.player.points==5,"Leveling grants health and stat points")
 	var before_points = g._damage()
 	g._activate("stat:strength")
-	check.call(g._damage()>before_points and g.player.points==4,"Spending Strength raises damage")
+	check.call(g._damage()==before_points and g.remaining_stat_points()==4 and g.preview_stats().damage_min>g.stats.damage_min,"Strength allocation previews without spending")
 	g._activate("stat:vitality",false,true)
+	g.confirm_stat_points()
 	check.call(g.player.points==0 and g.player.max_hp==140+16 and g.player.hp==g.player.max_hp,"Shift-click spends several points; Vitality raises health")
 	var enemy = g._spawn_enemy("imp",g.player.pos+Vector2(1,0))
 	enemy.hp = 200.0; enemy.max_hp = 200.0; enemy.attack = 100.0
@@ -650,13 +666,13 @@ static func _progression(g, check: Callable) -> void:
 	check.call(boss_found and g.drops.any(func(d): return d.kind=="item" and int(d.item.rarity)==4),"The Warden drops a Legendary item")
 	g.enemies.clear()
 	g._update(0.9)
-	check.call(g.state=="victory" and g._load_save().is_empty(),"Boss victory clears checkpoint")
+	check.call(g.state=="victory" and not g._load_save().is_empty(),"Victory preserves the last save")
 	g._begin()
 	g.player.inv = 0
 	g.player.attributes.dexterity = 0
 	g._recalc()
 	g._hurt(9999)
-	check.call(g.state=="defeat" and g._load_save().is_empty(),"Defeat clears checkpoint")
+	check.call(g.state=="defeat" and not g._load_save().is_empty(),"Defeat preserves the last save")
 
 static func _items(g, check: Callable) -> void:
 	g._begin()
@@ -861,3 +877,89 @@ static func _inventory(g, check: Callable, finished: Array) -> void:
 	g.player.equipment.boots = Items.generate(g,1,1,"boots")
 	check.call(not Inventory.store(g,spare),"A full bag refuses new items")
 	finished.append(true)
+
+static func _save_features(g, check: Callable) -> void:
+	g._begin()
+	g.run_seed = 777
+	g._travel("street",1,"start")
+	g.enemies.clear()
+	var mall = g.exits.filter(func(e): return e.to[0]=="mall")[0]
+	g.player.pos = mall.pos
+	g._reveal()
+	var street_seen = g.seen.duplicate()
+	g._travel("mall",1,"door")
+	var mall_seen = g.seen.duplicate()
+	g._travel("street",1,"door:mall")
+	check.call(street_seen.keys().all(func(c): return g.seen.has(c)), "Street exploration survives a mall round trip")
+	g._travel("mall",1,"door")
+	check.call(mall_seen.keys().all(func(c): return g.seen.has(c)), "Mall exploration is stored separately")
+	g._gain_xp(g._xp_needed())
+	var saved = g._load_save()
+	check.call(saved.stats.level==g.player.level and saved.stats.points==g.player.points, "Level-up autosaves new level and stat points")
+	var attributes = g.player.attributes.duplicate()
+	var points = g.player.points
+	g._character()
+	g.spend_point("strength",2)
+	g.spend_point("vitality",3)
+	check.call(g.remaining_stat_points()==0 and g.pending_stats.size()==2, "Last available point remains pending for confirmation")
+	g.refund_pending_point("strength")
+	g.spend_point("focus")
+	check.call(g.pending_stats.strength==1 and g.pending_stats.focus==1, "Minus reallocates an unconfirmed point")
+	g._save()
+	check.call(g._load_save().stats.attributes==attributes and g._load_save().stats.points==points, "Saving never commits pending allocations")
+	g._activate("cancel_stats")
+	check.call(g.pending_stats.is_empty() and g.player.attributes==attributes and g.remaining_stat_points()==points, "Cancel restores every available point")
+	g.spend_point("vitality")
+	g._close_panels()
+	check.call(g.pending_stats.is_empty() and g.player.attributes==attributes, "Closing character discards unconfirmed changes")
+	g._character(); g.spend_point("strength",2); g.confirm_stat_points()
+	check.call(g.player.attributes.strength==attributes.strength+2 and g.player.points==points-2 and g.pending_stats.is_empty(), "Confirm commits exactly the allocated points")
+	g.refund_pending_point("strength",5)
+	check.call(g.player.attributes.strength==attributes.strength+2, "Minus cannot refund previously confirmed points")
+	g._close_panels()
+	var position = g.player.pos
+	g._activate("settings"); g._activate("save_game")
+	check.call(g.state=="paused" and g.save_status=="Game saved.", "Settings save reports success while paused")
+	g._begin(true)
+	check.call(g.player.pos.distance_to(position)<0.001 and g.area.kind=="mall", "Continue restores saved area and position")
+	g._travel("street",1,"door:mall")
+	check.call(street_seen.keys().all(func(c): return g.seen.has(c)), "Other-area exploration survives restarting from save")
+	var original_save = g.save_file
+	g.save_file = "res://previews/missing-save-directory/test.json"
+	check.call(not g._save() and g.save_status.begins_with("Save failed"), "Failed writes are reported instead of claiming success")
+	g.save_file = original_save
+	check.call(not g._load_save().is_empty(), "A failed save leaves the valid checkpoint intact")
+
+	g.state = "play"
+	g.player.hp = g.player.max_hp
+	var potions = g.player.potions
+	g._potion()
+	check.call(g.player.potions==potions and g.notice.contains("already full"), "Full-health potion warning consumes nothing")
+	g.player.hp = 1; g.player.potions = 0; g._potion()
+	check.call(g.notice.begins_with("No potions"), "Empty potion warning explains where to restock")
+	g._activate("settings")
+	var checkpoint = FileAccess.get_file_as_string(g.save_file)
+	g._activate("restart")
+	check.call(g.confirm_new_game and g.state=="paused", "New Adventure asks for confirmation")
+	g._activate("cancel_new_game")
+	check.call(not g.confirm_new_game and FileAccess.get_file_as_string(g.save_file)==checkpoint, "Cancelling a new adventure preserves the save")
+	g._activate("controls")
+	check.call(g.settings_page=="controls" and g.state=="paused", "Controls page keeps gameplay paused")
+	g._activate("settings_back")
+	var audio = g.synth
+	var previous_path = audio.preferences_path
+	var previous = [audio.enabled,audio.music_enabled,audio.effects_enabled]
+	audio.preferences_path = "res://previews/audio-test.cfg"
+	audio.enabled = true; audio.music_enabled = true; audio.effects_enabled = true
+	g._activate("music")
+	check.call(not audio.music_enabled and audio.effects_enabled, "Music toggle leaves effects on")
+	g._activate("effects")
+	check.call(AudioServer.is_bus_mute(AudioServer.get_bus_index("SFX")), "Effects toggle mutes active effects")
+	audio.music_enabled = true; audio.effects_enabled = true; audio.load_preferences()
+	check.call(not audio.music_enabled and not audio.effects_enabled, "Audio choices reload from disk")
+	g._activate("sound")
+	audio.enabled = true; audio.load_preferences()
+	check.call(not audio.enabled, "Master mute preference reloads from disk")
+	DirAccess.remove_absolute(audio.preferences_path)
+	audio.preferences_path = previous_path
+	audio.enabled = previous[0]; audio.music_enabled = previous[1]; audio.effects_enabled = previous[2]

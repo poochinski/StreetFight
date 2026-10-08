@@ -89,6 +89,12 @@ var stock: Array = []
 var theme_cache = {}
 var cells = {}
 var seen = {}
+var explored = {}
+var pending_stats = {}
+var save_status = ""
+var save_flash = 0.0
+var settings_page = "main"
+var confirm_new_game = false
 var rooms: Array = []
 var enemies: Array = []
 var props: Array = []
@@ -147,7 +153,7 @@ var item_art
 var loot_view
 ## Derived hero stats (damage, crit, armor...), rebuilt by _recalc when gear or points change.
 var stats = {}
-var panels = {"character":false, "inventory":false}
+var panels = {"character":false, "inventory":false, "quests":false, "companion":false}
 ## The item on the mouse cursor while the panels are open.
 var held = null
 var loot_feed: Array = []
@@ -189,6 +195,7 @@ func _ready() -> void:
 	testing = "--smoke-test" in args or "--render-check" in args or "--gear-gallery" in args
 	if testing: save_file = "user://faithful-port-test.json"
 	synth.enabled = not testing
+	if not testing: synth.load_preferences()
 	if not "--smoke-test" in args and not "--2d" in args:
 		view3d = View3D.new()
 		add_child(view3d)
@@ -287,19 +294,36 @@ func _generate(number: int, kind: String = "street", arrive: String = "start") -
 	if kind=="street": DungeonGenerator.generate(self,number)
 	else: ZoneGenerator.generate(self,kind,number)
 	if not arrivals.is_empty(): player.pos = arrivals.get(arrive,arrivals.get("start",arrivals.values()[0]))
+	for cell in explored.get(Zones.key(kind,number), []):
+		seen[Vector2i(int(cell[0]),int(cell[1]))] = true
 	world_view.redraw_all()
 	if view3d: view3d.build()
 	camera = _iso(player.pos)
 	_reveal()
-	if state=="play": _save()
 
-func _save() -> void:
-	SaveGame.write(save_file,player,floor_number,kills,elapsed,seed_value,
-		{"area":area,"run_seed":run_seed,"visited":visited.keys(),"stash":stash,"quests":player.get("quests",{})})
+
+func _remember_map() -> void:
+	var revealed: Array = []
+	for cell in seen: revealed.append([cell.x,cell.y])
+	explored[Zones.key(area.kind, int(area.level))] = revealed
+
+func _save() -> bool:
+	_remember_map()
+	var ok = SaveGame.write(save_file,player,floor_number,kills,elapsed,seed_value,
+		{"area":area,"run_seed":run_seed,"visited":visited.keys(),"stash":stash,"quests":player.get("quests",{}),
+		"explored":explored,"position":[player.pos.x,player.pos.y]})
+	save_status = "Game saved." if ok else "Save failed. Please try again."
+	if ok:
+		cached_save = _load_save()
+		save_flash = 2.5
+	else: _notice(save_status)
+	return ok
 
 ## Goes to a place (see zones.gd for arrival points). Each place is built from
 ## the run's seed, so it is the same place every visit.
 func _travel(kind: String, level: int, arrive: String) -> void:
+	if not seen.is_empty(): _remember_map()
+	pending_stats.clear()
 	visited[Zones.key(kind,level)] = true
 	if kind=="mall" and arrive=="foodcourt": visited["foodcourt"] = true
 	if kind=="mall": stock.clear()
@@ -332,7 +356,7 @@ func _load_save() -> Dictionary:
 
 func _begin(continue_game: bool = false, class_id: String = "") -> void:
 	var saved = _load_save() if continue_game else {}
-	shop = ""; stock.clear(); visited.clear()
+	shop = ""; stock.clear(); visited.clear(); explored.clear(); seen.clear(); pending_stats.clear(); save_status = ""
 	stash = []
 	stash.resize(Zones.STASH_SIZE)
 	if class_id=="": class_id = chosen_class
@@ -358,14 +382,24 @@ func _begin(continue_game: bool = false, class_id: String = "") -> void:
 		var kept: Array = world.get("stash",[])
 		for i in mini(kept.size(),Zones.STASH_SIZE): stash[i] = kept[i]
 		player.quests = world.get("quests",{}).duplicate()
+		explored = world.get("explored",{}).duplicate(true)
 		place = world.get("area",{"kind":"street","level":number,"arrive":"start"})
 	state = "play"
-	panels.character = false; panels.inventory = false
+	panels.quests = false; panels.companion = false; panels.character = false; panels.inventory = false
 	held = null; loot_feed.clear(); level_banner = 0
 	keys.clear(); attack_held = false; pointer_active = false
 	if not player.has("quests"): player.quests = {}
 	_recalc()
 	_travel(place.kind,int(place.level),place.get("arrive","start"))
+	if not saved.is_empty():
+		var position = saved.get("world",{}).get("position",[])
+		if position.size()==2:
+			var at = Vector2(position[0],position[1])
+			if _free(at,HERO_RADIUS): player.pos = at
+			camera = _iso(player.pos)
+			if view3d: view3d.place_camera(player.pos)
+			_reveal()
+			_save()
 	_notice("Your descent continues." if not saved.is_empty() else "Neon Row, 1989. Find the subway entrance.")
 	if saved.is_empty(): _feed("%s learned: %s" % [Classes.info(self).name,Classes.SKILLS[Classes.skill_ids(self)[0]].name],Data.SUN_YELLOW)
 
@@ -619,7 +653,7 @@ func _potion() -> void:
 		_notice("Your health is already full.")
 		return
 	if player.potions<=0:
-		_notice("No potions left. Search footlockers or buy some at the subway.")
+		_notice("No potions left. Visit the Juice Bar or search footlockers.")
 		return
 	player.potions -= 1
 	player.hp = minf(player.max_hp,player.hp+roundi(player.max_hp*0.65))
@@ -702,16 +736,40 @@ func _gain_xp(amount: int) -> void:
 			_feed("New skill learned: %s" % skill,Data.NEON_CYAN)
 			_notice("New skill: %s. Check your hotbar." % skill)
 		_tone(800,0.5)
+		_save()
+
+func remaining_stat_points() -> int:
+	var remaining = int(player.points)
+	for count in pending_stats.values(): remaining -= int(count)
+	return remaining
+
+func preview_stats() -> Dictionary:
+	var preview = player.duplicate()
+	preview.attributes = player.attributes.duplicate()
+	for key in pending_stats: preview.attributes[key] += pending_stats[key]
+	return Items.derive(preview)
 
 func spend_point(attribute: String,count: int = 1) -> void:
-	count = mini(count,int(player.points))
+	if not Items.ATTRIBUTES.has(attribute): return
+	count = mini(count,remaining_stat_points())
 	if count<=0: return
-	player.attributes[attribute] = int(player.attributes[attribute])+count
-	player.points -= count
+	pending_stats[attribute] = int(pending_stats.get(attribute,0))+count
+	_tone(660,0.08,"triangle",0.02)
+
+func refund_pending_point(attribute: String, count: int = 1) -> void:
+	if not pending_stats.has(attribute): return
+	pending_stats[attribute] = maxi(0,int(pending_stats[attribute])-count)
+	if pending_stats[attribute]==0: pending_stats.erase(attribute)
+
+func confirm_stat_points() -> void:
+	if pending_stats.is_empty(): return
 	var hp_before = player.max_hp
+	player.points = remaining_stat_points()
+	for key in pending_stats: player.attributes[key] += pending_stats[key]
+	pending_stats.clear()
 	_recalc()
 	player.hp += player.max_hp-hp_before
-	_tone(660,0.08,"triangle",0.02)
+	_save()
 
 # --- Loot ---------------------------------------------------------------------------
 
@@ -840,7 +898,9 @@ func _tone(frequency: float = 220,duration: float = 0.12,shape: String = "triang
 # --- Game states and input --------------------------------------------------
 
 func _pause() -> void:
-	if state=="play": state = "paused"
+	if state=="play":
+		state = "paused"
+		settings_page = "main"
 	elif state=="paused": state = "play"
 	keys.clear(); attack_held = false
 	attack_buffer = 0; screen_velocity = Vector2.ZERO
@@ -848,17 +908,21 @@ func _pause() -> void:
 ## Opens or closes one of the two pages. The game pauses while either is open.
 func _toggle_panel(name: String) -> void:
 	if state!="play" and state!="inventory": return
-	panels[name] = not panels[name]
+	var opening = not panels[name]
+	if name in ["quests", "companion"] or panels.quests or panels.companion:
+		for panel in panels: panels[panel] = false
+	panels[name] = opening
 	_panels_changed()
 
 func _close_panels() -> void:
-	panels.character = false; panels.inventory = false; shop = ""
+	panels.quests = false; panels.companion = false; panels.character = false; panels.inventory = false; shop = ""
 	_panels_changed()
 
 func _panels_changed() -> void:
+	if not panels.character: pending_stats.clear()
 	if not panels.inventory: Inventory.stow_held(self)
 	if panels.character or not panels.inventory: shop = ""
-	state = "inventory" if panels.character or panels.inventory or shop!="" else "play"
+	state = "inventory" if panels.character or panels.inventory or panels.quests or panels.companion or shop!="" else "play"
 	keys.clear(); attack_held = false
 	attack_buffer = 0; screen_velocity = Vector2.ZERO
 	walk_target = null
@@ -871,12 +935,12 @@ func _character() -> void:
 	_toggle_panel("character")
 
 func _finish(won: bool) -> void:
-	panels.character = false; panels.inventory = false; held = null
+	panels.quests = false; panels.companion = false; panels.character = false; panels.inventory = false; held = null
 	state = "victory" if won else "defeat"
 	keys.clear(); attack_held = false
 	victory_timer = -1
-	SaveGame.erase(save_file)
-	cached_save = {}
+	pending_stats.clear()
+	cached_save = _load_save()
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
@@ -915,6 +979,12 @@ func _input(event: InputEvent) -> void:
 			return
 		if event.echo: return
 		if key==KEY_ESCAPE:
+			if confirm_new_game:
+				confirm_new_game = false
+				return
+			if state=="paused" and settings_page=="controls":
+				settings_page = "main"
+				return
 			if state=="inventory": _close_panels()
 			else: _pause()
 			return
@@ -968,6 +1038,9 @@ func _activate(id: String,right: bool = false,shift: bool = false) -> void:
 			if right: Inventory.unequip(self,parts[1])
 			else: Inventory.click_equipment(self,parts[1])
 			return
+		"stat_minus":
+			refund_pending_point(parts[1],5 if shift else 1)
+			return
 		"stat":
 			spend_point(parts[1],5 if shift else 1)
 			return
@@ -986,14 +1059,34 @@ func _activate(id: String,right: bool = false,shift: bool = false) -> void:
 	if right: return
 	match id:
 		"start", "restart":
-			state = "create"
-			_tone(420,0.08,"triangle",0.02)
+			if state!="title" or not _load_save().is_empty(): confirm_new_game = true
+			else: state = "create"
+		"confirm_new_game":
+			if confirm_new_game:
+				confirm_new_game = false
+				state = "create"
+		"cancel_new_game": confirm_new_game = false
+		"controls": settings_page = "controls"
+		"settings_back": settings_page = "main"
+		"music", "effects":
+			if id=="music": synth.music_enabled = not synth.music_enabled
+			else: synth.effects_enabled = not synth.effects_enabled
+			if not synth.save_preferences(): _notice("Could not save sound settings.")
 		"begin": _begin(false,chosen_class)
 		"back": state = "title"
 		"continue": _begin(true)
+		"settings":
+			if state=="inventory": _close_panels()
+			if state=="play": _pause()
+		"save_game":
+			if state=="paused": _save()
+		"confirm_stats": confirm_stat_points()
+		"cancel_stats": pending_stats.clear()
 		"pause", "resume": _pause()
 		"inventory", "close_inventory", "toggle_inventory": _inventory()
 		"close_character", "toggle_character": _character()
+		"toggle_quests": _toggle_panel("quests")
+		"toggle_companion": _toggle_panel("companion")
 		"close_shop": _close_panels()
 		"buy_potion": Inventory.buy_potion(self)
 		"toggle_map": map_visible = not map_visible
@@ -1004,6 +1097,7 @@ func _activate(id: String,right: bool = false,shift: bool = false) -> void:
 		"potion": _potion()
 		"sound":
 			synth.enabled = not synth.enabled
+			if not synth.save_preferences(): _notice("Could not save sound settings.")
 			_tone(440,0.15)
 		"quit": get_tree().quit()
 
@@ -1016,6 +1110,7 @@ func _notification(what: int) -> void:
 
 func _process(delta: float) -> void:
 	clock += delta
+	save_flash = maxf(0,save_flash-delta)
 	_apply_zoom()
 	_advance_game(delta)
 	if view3d: view3d.sync(delta)

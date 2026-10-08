@@ -72,6 +72,8 @@ static func _mall(g, level: int, reserved: Dictionary) -> void:
 	g.rooms.append(hall_zone)
 	var door = Vector2(5.5, 31.5)
 	_exit(g, "door", door, ["street", Zones.home_street("mall"), "door:mall"], "Exit to %s" % Zones.street_name(Zones.home_street("mall")), "door", Vector2.RIGHT)
+	g.exits[-1]["zone"] = "mall"
+	g.exits[-1]["sign"] = "TO NEON ROW"
 	g.stairs = door
 	for c in DG._cells_around(Vector2i(door), 2): reserved[c] = true
 	# The food court: vendors along the back wall, tables, a fountain.
@@ -167,9 +169,18 @@ static func _park(g, level: int, reserved: Dictionary) -> void:
 	# The fountain plaza where the paths cross.
 	var plaza = Rect2i(27, 27, 10, 10)
 	DG._style(g, plaza, "pavers")
+	# The return gate opens onto a visible sidewalk and street, not a facade.
+	for y in range(26, 39):
+		for x in range(0, 5):
+			var cell = Vector2i(x, y)
+			g.cells[cell] = DG.CORRIDOR if x<3 else DG.SIDEWALK
+			g.cell_style.erase(cell)
+			reserved[cell] = true
+			if x==0: g.blocked[cell] = true
 	var entry = DG._zone(Rect2i(4, 26, 8, 12), "gate")
 	var gate = Vector2(4.5, 32.0)
 	_exit(g, "gate", gate, ["street", Zones.home_street("park"), "door:park"], "Exit to %s" % Zones.street_name(Zones.home_street("park")), "door", Vector2.RIGHT)
+	g.exits[-1]["sign"] = "TO NEON ROW"
 	g.stairs = gate
 	for c in DG._cells_around(Vector2i(gate), 3): reserved[c] = true
 	# A pond in the south-west, a camp in the north-west, the bandshell in the

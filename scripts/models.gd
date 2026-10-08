@@ -688,18 +688,26 @@ func npc(model: String, facing: Vector2) -> Node3D:
 ## A doorway into a side area, set into a building front: a dark opening in a
 ## lit frame with the place's name over it. Gates (the park) are an iron arch.
 func doorway(exit: Dictionary, t: Dictionary, gate: bool) -> Node3D:
+	if exit.get("zone", "")=="mall": return mall_entrance(exit)
 	var root = Node3D.new()
 	var text: String = exit.get("sign", "EXIT")
 	var color = Color("5dff8f") if gate else Color("ff4fd8")
 	if exit.has("zone") and exit.zone=="warehouse": color = Color("ffb438")
 	if gate:
 		var iron = _material(Color("1c1c22"), 0.5, 0.7)
-		for x in [-0.75, 0.75]:
-			_part(root, "box", Vector3(0.22, 2.3, 0.22), Vector3(x, 1.15, 0.05), _material(Color("6a5a50"), 0.9))
-			_part(root, "sphere", Vector3(0.14, 0, 0), Vector3(x, 2.4, 0.05), _glow_material(Color("ffe8a0"), 2.5), false)
-		var arch = _part(root, "cyl", Vector3(0.78, 0.06, 0), Vector3(0, 2.15, 0.05), iron)
-		arch.rotation.x = PI/2
-		for k in 6: _part(root, "box", Vector3(0.03, 1.8, 0.03), Vector3(-0.6+k*0.24, 0.9, 0.05) if k%5!=0 else Vector3(-0.6+k*0.24, 0.9, 0.25), iron)
+		# Open promenade: fence wings and trees frame a broad, unobstructed path.
+		for x in [-2.1, 2.1]:
+			_part(root, "box", Vector3(0.32, 1.65, 0.32), Vector3(x, 0.825, 0), _material(Color("807365"), 0.9))
+			_part(root, "sphere", Vector3(0.14, 0, 0), Vector3(x, 1.8, 0), _glow_material(Color("ffe8a0"), 2), false)
+			for k in 6:
+				var fx = x+signf(x)*k*0.3
+				_part(root, "box", Vector3(0.045, 1.1, 0.045), Vector3(fx, 0.55, 0), iron)
+			for height in [0.35, 1.0]:
+				_part(root, "box", Vector3(1.8, 0.06, 0.06), Vector3(x+signf(x)*0.8, height, 0), iron)
+			for z in [-1.6, -3.2]:
+				_part(root, "cyl", Vector3(0.14, 1.2, 0), Vector3(x*1.3, 0.6, z), _material(Color("67503c"), 0.9))
+				_part(root, "sphere", Vector3(0.85, 0, 0), Vector3(x*1.3, 1.7, z), _material(Color("315e42"), 0.9))
+
 	else:
 		var frame = _material(Color("2a2834"), 0.4, 0.6)
 		_part(root, "box", Vector3(1.3, 1.75, 0.04), Vector3(0, 0.875, 0.02), _material(Color("050507"), 1.0), false)
@@ -719,6 +727,34 @@ func doorway(exit: Dictionary, t: Dictionary, gate: bool) -> Node3D:
 	label.position = Vector3(0, 2.6 if not gate else 2.95, 0.12)
 	root.add_child(label)
 	_light(root, color, 2.0, 5.0, Vector3(0, 2.0, 0.9))
+	return root
+
+func mall_entrance(exit: Dictionary) -> Node3D:
+	var root = Node3D.new()
+	var stone = _material(Color("b0a7b8"), 0.7)
+	var chrome = _material(Color("74869b"), 0.3, 0.7)
+	var glass = _material(Color("24556c"), 0.25, 0.4)
+	# Broad glazed frontage, double doors and a projecting illuminated canopy.
+	_part(root, "box", Vector3(8.0, 3.4, 0.25), Vector3(0, 1.7, -0.18), stone)
+	for x in [-3.0, -1.8, -0.6, 0.6, 1.8, 3.0]:
+		_part(root, "box", Vector3(1.08, 2.4, 0.12), Vector3(x, 1.25, 0.02), glass)
+		_part(root, "box", Vector3(0.06, 2.5, 0.2), Vector3(x-0.57, 1.25, 0.1), chrome)
+	for x in [-0.2, 0.2]:
+		_part(root, "box", Vector3(0.055, 0.55, 0.12), Vector3(x, 1.0, 0.2), chrome)
+	_part(root, "box", Vector3(8.4, 0.25, 1.7), Vector3(0, 2.7, 0.6), stone)
+	_part(root, "box", Vector3(8.1, 0.055, 0.08), Vector3(0, 2.64, 1.46), _glow_material(Color("ff4fd8"), 2), false)
+	var label = Label3D.new()
+	label.text = exit.get("sign", "STARLIGHT MALL")
+	label.font_size = 90; label.pixel_size = 0.006
+	label.position = Vector3(0, 3.22, 0.18)
+	label.modulate = Color("ffd3f4"); label.outline_size = 10; label.shaded = false
+	root.add_child(label)
+	# Marked parking bays flank the pedestrian approach.
+	for side in [-1, 1]:
+		for z in [2.3, 4.0]:
+			_part(root, "box", Vector3(2.1, 0.015, 0.06), Vector3(side*2.8, 0.025, z), _material(Color("d5cfac"), 1), false)
+		_part(root, "box", Vector3(0.07, 0.015, 3.4), Vector3(side*1.65, 0.025, 3.1), _material(Color("d5cfac"), 1), false)
+	_light(root, Color("ff9edb"), 2, 6, Vector3(0, 2.4, 1.5))
 	return root
 
 func dark_material() -> StandardMaterial3D:
@@ -795,10 +831,11 @@ func open_prop(node: Node3D, pr: Dictionary) -> void:
 func subway(t: Dictionary, text: String = "SUBWAY") -> Node3D:
 	var root = Node3D.new()
 	var rail = _material(Color("2e6a4a"), 0.4, 0.6)
-	_part(root, "box", Vector3(1.5, 0.02, 1.9), Vector3(0, 0.012, 0), _material(Color("050507"), 1.0), false)
+	_part(root, "box", Vector3(1.5, 0.02, 1.9), Vector3(0, -1.0, 0), _material(Color("050507"), 1.0), false)
 	for k in 5:
-		_part(root, "box", Vector3(1.4, 0.03, 0.3), Vector3(0, 0.02, -0.75+k*0.34), _material(Color("2a2a30").lightened(0.08*(4-k)), 0.9), false)
+		_part(root, "box", Vector3(1.5, 0.17, 0.34), Vector3(0, -0.93+k*0.17, -0.75+k*0.34), _material(Color("2a2a30").lightened(0.08*(4-k)), 0.9), false)
 	for x in [-0.78, 0.78]:
+		_part(root, "box", Vector3(0.06, 1.0, 2.0), Vector3(x, -0.5, 0), _material(Color("30343a"), 0.9))
 		_part(root, "box", Vector3(0.06, 0.9, 2.0), Vector3(x, 0.45, 0), rail)
 	_part(root, "box", Vector3(1.6, 0.9, 0.06), Vector3(0, 0.45, -1.0), rail)
 	for x in [-0.78, 0.78]:

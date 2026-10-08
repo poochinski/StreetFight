@@ -1,20 +1,26 @@
 extends RefCounted
-## Checkpoints: written on entering a place, removed on victory or defeat.
-## Version 2 stores attributes, unspent points, equipment and the bag. Version 3
-## adds the world: where the hero is, the run's seed, places visited, the stash
-## and side quests. Version 2 saves still load, on the street of their floor.
+## Version 4 checkpoints preserve position and per-area exploration.
+## Written manually and on travel, level-up, and confirmed stat allocation.
+## Versions 2 and 3 remain readable; completed runs keep their last checkpoint.
 
 const Items = preload("res://scripts/items.gd")
-const VERSION = 3
+const VERSION = 4
 const Zones = preload("res://scripts/zones.gd")
 const AREA_KINDS = ["street", "mall", "park", "warehouse", "subway"]
 const STAT_KEYS = ["hp","level","xp","gold","potions","mana","attributes","points","equipment","bag","class"]
 
-static func write(path: String, player: Dictionary, floor_number: int, kills: int, elapsed: float, seed_value: int, world: Dictionary = {}) -> void:
+static func write(path: String, player: Dictionary, floor_number: int, kills: int, elapsed: float, seed_value: int, world: Dictionary = {}) -> bool:
 	var stats = {}
 	for key in STAT_KEYS: stats[key] = player[key]
-	var file = FileAccess.open(path,FileAccess.WRITE)
-	if file: file.store_string(JSON.stringify({"version":VERSION,"floor":floor_number,"stats":stats,"kills":kills,"time":elapsed,"seed":seed_value,"world":world}))
+	var temporary = path+".tmp"
+	var file = FileAccess.open(temporary,FileAccess.WRITE)
+	if file==null: return false
+	file.store_string(JSON.stringify({"version":VERSION,"floor":floor_number,"stats":stats,"kills":kills,"time":elapsed,"seed":seed_value,"world":world}))
+	file.flush()
+	var ok = file.get_error()==OK
+	file.close()
+	if not ok: return false
+	return DirAccess.rename_absolute(temporary,path)==OK
 
 static func _number(value) -> bool:
 	return value is float or value is int
@@ -39,7 +45,7 @@ static func _valid_item(item) -> bool:
 static func read(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path): return {}
 	var data = JSON.parse_string(FileAccess.get_file_as_string(path))
-	if not data is Dictionary or not (data.get("version") in [2.0,3.0]): return {}
+	if not data is Dictionary or not (data.get("version") in [2.0,3.0,4.0]): return {}
 	if not data.get("stats") is Dictionary or int(data.get("floor",0)) not in [1,2,3]: return {}
 	var s = data.stats
 	for k in ["hp","level","xp","gold","potions","mana","points"]:
@@ -66,6 +72,18 @@ static func read(path: String) -> Dictionary:
 		if not world.get("stash") is Array or world.stash.size()>Zones.STASH_SIZE: return {}
 		for item in world.stash:
 			if not _valid_item(item): return {}
+		if world.has("position"):
+			if not world.position is Array or world.position.size()!=2: return {}
+			for v in world.position:
+				if not _number(v) or not is_finite(v) or v<0 or v>=64: return {}
+		if world.has("explored"):
+			if not world.explored is Dictionary or world.explored.size()>15: return {}
+			for key in world.explored:
+				if not key is String or not world.explored[key] is Array or world.explored[key].size()>4096: return {}
+				for cell in world.explored[key]:
+					if not cell is Array or cell.size()!=2: return {}
+					for v in cell:
+						if not _number(v) or not is_finite(v) or v<0 or v>=64 or v!=floor(v): return {}
 		world.run_seed = int(world.run_seed)
 		area.level = int(area.level)
 	# JSON stores every number as a float; counters go back to whole numbers.

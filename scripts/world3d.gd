@@ -202,6 +202,20 @@ func _box(st: SurfaceTool, lo: Vector3, hi: Vector3, top: Color, side: Color) ->
 	_quad(st, Vector3(lo.x, lo.y, hi.z), Vector3(lo.x, lo.y, lo.z), Vector3(lo.x, hi.y, lo.z), Vector3(lo.x, hi.y, hi.z), side.darkened(0.18))
 
 func _ground_cell(st: SurfaceTool, c: Vector2i, t: Dictionary) -> void:
+	# Leave a real opening in the sidewalk for the descending subway steps.
+	for e in g.exits:
+		if e.kind!="subway": continue
+		var size = Vector2(1.5, 1.9) if e.face.y!=0 else Vector2(1.9, 1.5)
+		var hole = Rect2(e.pos-size/2, size)
+		var tile = Rect2(Vector2(c), Vector2.ONE)
+		if not tile.intersects(hole): continue
+		var cut = tile.intersection(hole)
+		var col: Color = t.sidewalk[0]
+		_flat(st, tile.position.x, tile.position.y, cut.position.x, tile.end.y, 0.1, col)
+		_flat(st, cut.end.x, tile.position.y, tile.end.x, tile.end.y, 0.1, col)
+		_flat(st, cut.position.x, tile.position.y, cut.end.x, cut.position.y, 0.1, col)
+		_flat(st, cut.position.x, cut.end.y, cut.end.x, tile.end.y, 0.1, col)
+		return
 	var kind = g.cells[c]
 	var style: String = g.cell_style.get(c, "")
 	var hv = _h(c.x, c.y)
@@ -471,7 +485,8 @@ func _build_exits(t: Dictionary) -> void:
 		match exit.kind:
 			"subway":
 				node = models.subway(t)
-				node.position = v3(exit.pos)
+				node.position = v3(exit.pos)+Vector3(0, 0.11, 0)
+				Models.face(node, exit.face)
 			"stairs":
 				node = models.subway(t, "EXIT")
 				node.position = v3(exit.pos)

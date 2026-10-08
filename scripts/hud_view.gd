@@ -34,6 +34,7 @@ func draw() -> void:
 	ui.alpha = 1
 	if g.state=="title":
 		_title()
+		if g.confirm_new_game: _new_game_confirmation()
 		return
 	if g.state=="create":
 		_create()
@@ -49,8 +50,11 @@ func draw() -> void:
 	_messages()
 	_level_banner()
 	inventory_view.draw()
+	_utility_panel()
 	if g.state in ["paused", "victory", "defeat"]:
 		_modal()
+		if g.confirm_new_game: _new_game_confirmation()
+		_button_tooltip()
 		return
 	if g.state=="inventory": inventory_view.draw_overlay()
 	elif g.state=="play":
@@ -58,14 +62,23 @@ func draw() -> void:
 		if drop!=null and drop.kind=="item": inventory_view.draw_tooltip(drop.item, g.pointer, "ground")
 		elif hovered_skill!="": _skill_tooltip(hovered_skill)
 
+	_button_tooltip()
+
 func _screen() -> Vector2:
 	return c.get_viewport_rect().size
 
 # --- Top left: portrait, health and mana, page buttons ----------------------------
 
-func _top_left(character_open: bool) -> void:
-	# The character page shows all of this, and its crest sits here.
-	if character_open: return
+func _top_left(_character_open: bool) -> void:
+	var labels = [["character", "Character"], ["quests", "Quests"], ["inventory", "Inventory"], ["companion", "Companion"]]
+	for i in labels.size():
+		ui.button("toggle_"+labels[i][0], Rect2(16+i*100, 14, 94, 32), labels[i][1], g.panels.get(labels[i][0], false), 12)
+	if g.player.points>0:
+		ui.text("!", Vector2(101, 15), 13, Data.UPGRADE, ui.CENTER, ui.font_bold)
+
+## Retained portrait and resource-bar layout for the future companion feature.
+## Deliberately not drawn until a companion system supplies its own actor data.
+func _reserved_companion_portrait() -> void:
 	var player = g.player
 	var frame = Rect2(16, 14, 66, 66)
 	ui.rect(frame.grow(3), Color(0, 0, 0, 0.45))
@@ -81,21 +94,28 @@ func _top_left(character_open: bool) -> void:
 	ui.text("THE WAYFARER", Vector2(94, 14), 11, Data.SUN_YELLOW, ui.LEFT, ui.font_bold, 3)
 	ui.bar(Rect2(94, 30, 214, 17), player.hp/player.max_hp, Data.HEALTH, "%d / %d" % [ceili(player.hp), roundi(player.max_hp)], 10)
 	ui.bar(Rect2(94, 50, 214, 13), player.mana/maxf(1, player.max_mana), Data.MANA, "%d / %d" % [floori(player.mana), roundi(player.max_mana)], 9)
-	var buttons = [["toggle_character", "character", "C"], ["toggle_inventory", "inventory", "I"], ["toggle_map", "map", "M"]]
-	for i in buttons.size():
-		var r = Rect2(94+i*38, 70, 32, 32)
-		var hovered = r.has_point(g.pointer)
-		ui.rect(r, Color("2a1648") if hovered else Color("100820e6"))
-		ui.rect(r, Data.NEON_CYAN if hovered else Color(Data.PANEL_EDGE, 0.9), false, 1)
-		ui.icon(buttons[i][1], r.get_center()+Vector2(0, -1), 20, Data.CHROME if hovered else Data.INK)
-		ui.text(buttons[i][2], r.position+Vector2(3, 1), 8, Data.SUN_YELLOW, ui.LEFT, ui.font_bold)
-		g.buttons.append({"id":buttons[i][0], "rect":r})
-	if player.points>0:
-		var dot = Vector2(94+28, 72)
-		var pulse = 0.5+sin(g.clock*5)*0.5
-		ui.glow(dot, 14, Color(Data.UPGRADE, 0.3+pulse*0.3))
-		ui.circle(dot, 7, Data.UPGRADE.darkened(0.2))
-		ui.text("!", Vector2(dot.x, dot.y-7), 11, Color.WHITE, ui.CENTER, ui.font_bold)
+
+func _utility_panel() -> void:
+	if not g.panels.quests and not g.panels.companion: return
+	var r = Rect2(24, 64, 520, 350)
+	ui.panel(r)
+	var companion: bool = g.panels.companion
+	ui.text("COMPANION" if companion else "QUESTS", r.position+Vector2(24, 22), 22, Data.SUN_YELLOW, ui.LEFT, ui.font_bold)
+	ui.button("close_shop", Rect2(r.end.x-78, r.position.y+16, 60, 28), "Close")
+	if companion:
+		ui.text("No companion yet.", r.position+Vector2(24, 86), 16, Data.INK)
+		ui.text("Your companion's details will appear here.", r.position+Vector2(24, 118), 13, Data.INK_MUTED)
+	else:
+		ui.text("The Heart Below", r.position+Vector2(24, 72), 17, Data.NEON_PINK)
+		ui.text("Defeat the Ash Warden in Sunset Plaza.", r.position+Vector2(24, 101), 13, Data.INK)
+		var y = r.position.y+151
+		for kind in Zones.QUESTS:
+			if not g.player.get("quests", {}).has(kind): continue
+			var quest = Zones.QUESTS[kind]
+			var done = g.player.quests[kind]=="done"
+			ui.text(quest.title+(" — Complete" if done else " — Active"), Vector2(r.position.x+24, y), 15, Data.UPGRADE if done else Data.SUN_YELLOW)
+			ui.text(quest.task, Vector2(r.position.x+24, y+23), 12, Data.INK)
+			y += 57
 
 ## The 2D hero art as a class would look, for a class card.
 func _card_hero(id: String, feet: Vector2) -> void:
@@ -127,7 +147,7 @@ func _top_right(inventory_open: bool) -> void:
 	var w = _screen().x
 	var sound = Rect2(w-82, 12, 30, 30)
 	var pause = Rect2(w-46, 12, 30, 30)
-	for spec in [["sound", sound, "sound"], ["pause", pause, "pause"]]:
+	for spec in [["sound", sound, "sound"], ["settings", pause, "settings"]]:
 		var r: Rect2 = spec[1]
 		var hovered = r.has_point(g.pointer)
 		ui.rect(r, Color("2a1648") if hovered else Color("100820e6"))
@@ -465,6 +485,9 @@ func _wrap(value: String, size: int, max_width: float) -> Array:
 ## A glass orb of liquid with a moving surface, a chrome bezel and its value above.
 func _orb(center: Vector2, fraction: float, light: Color, dark: Color, badge: String, value: String) -> void:
 	var r = ORB_RADIUS
+	if badge=="HP" and fraction<0.25 and fraction>0:
+		ui.glow(center, r+22, Color(Data.HEALTH,0.12+0.10*(0.5+0.5*sin(g.clock*3))))
+		ui.ring(center,r+14,Color(Data.HEALTH,0.4+0.25*sin(g.clock*3)),2)
 	ui.circle(center, r+12, Color("06030c"))
 	ui.ring(center, r+9, Color("8a6a3c"), 5)
 	ui.ring(center, r+6, Color("f0d090"), 1.5)
@@ -509,6 +532,10 @@ func _loot_feed() -> void:
 
 func _messages() -> void:
 	var size = _screen()
+	if g.save_flash>0 and g.state=="play":
+		ui.alpha = minf(1,g.save_flash)
+		ui.text("Game saved", Vector2(size.x/2, 64), 12, Data.UPGRADE, ui.CENTER, ui.font_bold)
+		ui.alpha = 1
 	if g.state=="play" and g.notice_time>0:
 		ui.alpha = clampf(g.notice_time*2, 0, 1)
 		var width = ui.width(g.notice, 13, ui.font_bold)
@@ -525,6 +552,10 @@ func _messages() -> void:
 			var label = parts[1] if parts.size()>1 else interaction
 			var width = ui.width(label, 13, ui.font_bold)+44
 			var r = Rect2(size.x/2-width/2, size.y-168, width, 30)
+			var entrance = g._near_exit()
+			if not entrance.is_empty() and interaction=="E · "+entrance.label:
+				var at = g._to_screen(g._project(entrance.pos))
+				r.position = Vector2(clampf(at.x-width/2,8,size.x-width-8),clampf(at.y+32,130,size.y-168))
 			ui.rect(r, Color("0d0620e0"))
 			ui.rect(r, Data.NEON_CYAN, false, 1)
 			var key = Rect2(r.position+Vector2(8, 6), Vector2(18, 18))
@@ -691,18 +722,66 @@ func _modal() -> void:
 	ui.panel(rect, true)
 	var o = rect.position+Vector2(40, 44)
 	var paused = g.state=="paused"
+	if paused:
+		_settings(rect, o)
+		return
 	var won = g.state=="victory"
 	ui.text("T A K E   A   B R E A T H" if paused else "T H E   E M B E R S   B U R N   B R I G H T" if won else "T H E   D E P T H S   C L A I M   A N O T H E R", o, 10, Data.NEON_CYAN, ui.LEFT, ui.font_bold)
-	ui.chrome("Game Paused" if paused else "The Warden Has Fallen" if won else "Your Light Fades", o+Vector2(0, 22), 32)
+	ui.chrome("Settings" if paused else "The Warden Has Fallen" if won else "Your Light Fades", o+Vector2(0, 22), 32)
 	ui.text("The depths can wait." if paused else "You freed the Ember Depths." if won else "A new adventurer will follow your footsteps.", o+Vector2(0, 74), 13, Data.INK)
 	if paused:
 		ui.button("resume", Rect2(o+Vector2(0, 112), Vector2(400, 48)), "RETURN TO THE DEPTHS", true, 15)
-		ui.button("restart", Rect2(o+Vector2(0, 172), Vector2(400, 34)), "NEW ADVENTURE", false, 12)
+		ui.button("save_game", Rect2(o+Vector2(0, 168), Vector2(400, 34)), "SAVE GAME", false, 13)
+		ui.button("restart", Rect2(o+Vector2(0, 210), Vector2(400, 30)), "NEW ADVENTURE", false, 12)
+		ui.text(g.save_status, o+Vector2(200, 247), 12, Data.UPGRADE if g.save_status=="Game saved." else Data.DOWNGRADE, ui.CENTER)
 	else:
 		ui.text("Level %d  ·  %d foes defeated  ·  %d gold  ·  %dm %ds" % [player.level, g.kills, player.gold, int(g.elapsed)/60, int(g.elapsed)%60], o+Vector2(0, 104), 13, Data.SUN_YELLOW, ui.LEFT, ui.font_bold)
 		ui.button("restart", Rect2(o+Vector2(0, 150), Vector2(400, 48)), "NEW ADVENTURE", true, 15)
-	var help = ["Progress is saved when you enter a floor.", "Click to move and attack  ·  Shift-click attacks in place  ·  WASD also moves", "Right click / 1–4 skills  ·  Space dodge  ·  R potion  ·  E interact",
-		"C character page  ·  I inventory  ·  Esc pause"]
+	var help = ["Autosaves on travel, level-up and confirmed stat changes.", "Click to move and attack  ·  Shift-click attacks in place  ·  WASD also moves", "Right click / 1–4 skills  ·  Space dodge  ·  R potion  ·  E interact",
+		"C character page  ·  I inventory  ·  Esc settings"]
 	for i in help.size():
-		ui.text(help[i], Vector2(size.x/2, o.y+240+i*20), 11, Data.INK_MUTED, ui.CENTER)
-	ui.button("quit", Rect2(o+Vector2(0, 336), Vector2(400, 30)), "QUIT TO DESKTOP", false, 11)
+		ui.text(help[i], Vector2(size.x/2, o.y+272+i*18), 11, Data.INK_MUTED, ui.CENTER)
+	ui.button("quit", Rect2(o+Vector2(0, 356), Vector2(400, 30)), "QUIT TO DESKTOP", false, 11)
+
+func _settings(rect: Rect2, o: Vector2) -> void:
+	ui.chrome("Controls" if g.settings_page=="controls" else "Settings", o, 30)
+	if g.settings_page=="controls":
+		var lines = ["Left click / hold — Move or attack", "Shift + click — Attack in place", "WASD / arrows — Move", "Right click / 1 — First skill; 2–4 — Other skills", "J / hold — Basic attacks", "Space — Dodge     R — Healing potion", "E — Enter / interact     M — Minimap", "C — Character     I / B — Inventory", "Stats: + / − to adjust; Shift adjusts five", "Green check — Confirm     Red X — Cancel", "Escape — Close a panel / open Settings"]
+		for i in lines.size(): ui.text(lines[i],o+Vector2(0,54+i*25),13,Data.INK)
+		ui.button("settings_back",Rect2(o+Vector2(0,350),Vector2(400,34)),"BACK TO SETTINGS")
+		return
+	ui.button("resume",Rect2(o+Vector2(0,48),Vector2(400,38)),"RESUME GAME",true)
+	ui.button("save_game",Rect2(o+Vector2(0,96),Vector2(400,32)),"SAVE GAME")
+	ui.text(g.save_status,o+Vector2(200,134),12,Data.UPGRADE if g.save_status=="Game saved." else Data.DOWNGRADE,ui.CENTER)
+	ui.button("sound",Rect2(o+Vector2(0,158),Vector2(400,30)),"ALL SOUND: "+("ON" if g.synth.enabled else "MUTED"))
+	ui.button("music",Rect2(o+Vector2(0,196),Vector2(194,30)),"MUSIC: "+("ON" if g.synth.music_enabled else "OFF"))
+	ui.button("effects",Rect2(o+Vector2(206,196),Vector2(194,30)),"EFFECTS: "+("ON" if g.synth.effects_enabled else "OFF"))
+	ui.button("controls",Rect2(o+Vector2(0,236),Vector2(400,30)),"CONTROLS")
+	ui.button("restart",Rect2(o+Vector2(0,276),Vector2(400,30)),"NEW ADVENTURE")
+	ui.button("quit",Rect2(o+Vector2(0,350),Vector2(400,30)),"QUIT TO DESKTOP")
+
+func _new_game_confirmation() -> void:
+	g.buttons.clear()
+	ui.rect(Rect2(Vector2.ZERO,_screen()),Color("070210dd"))
+	var r = Rect2(_screen()/2-Vector2(240,115),Vector2(480,230))
+	ui.panel(r)
+	ui.chrome("Start a new adventure?",r.position+Vector2(24,24),24)
+	ui.text("Beginning a new character will replace your saved game.",r.position+Vector2(24,80),13,Data.INK)
+	ui.text("Keep your current adventure if you are not ready.",r.position+Vector2(24,108),13,Data.INK_MUTED)
+	ui.button("cancel_new_game",Rect2(r.position+Vector2(24,158),Vector2(210,38)),"KEEP CURRENT GAME",true,12)
+	ui.button("confirm_new_game",Rect2(r.position+Vector2(246,158),Vector2(210,38)),"NEW ADVENTURE",false,12)
+
+func _button_tooltip() -> void:
+	var tips = {"confirm_stats":"Confirm and save these stat points", "cancel_stats":"Discard all pending stat changes", "settings":"Settings: save, sound and controls", "sound":"Mute or unmute all sound", "music":"Toggle music; your preference is remembered", "effects":"Toggle sound effects; your preference is remembered"}
+	for i in range(g.buttons.size()-1,-1,-1):
+		var button = g.buttons[i]
+		if not button.rect.has_point(g.pointer): continue
+		if not tips.has(button.id): return
+		var text: String = tips[button.id]
+		var width = ui.width(text,12)+24
+		var r = Rect2(g.pointer+Vector2(12,22),Vector2(width,30))
+		r.position.x = clampf(r.position.x,8,_screen().x-width-8)
+		r.position.y = clampf(r.position.y,8,_screen().y-38)
+		ui.rect(r,Color("100820f5")); ui.rect(r,Data.NEON_CYAN,false,1)
+		ui.text(text,r.position+Vector2(12,7),12,Data.INK)
+		return
